@@ -1,19 +1,20 @@
-import React, { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  Calculator, 
-  ScrollText, 
-  FileSpreadsheet, 
-  Beef, 
-  Sprout, 
-  Coins, 
-  Users, 
-  Package, 
+import React, { useState } from "react";
+import {
+  LayoutDashboard,
+  Calculator,
+  ScrollText,
+  FileSpreadsheet,
+  Beef,
+  Sprout,
+  Coins,
+  Users,
+  Package,
   LogOut,
   Menu,
   X,
-  Flame
-} from 'lucide-react';
+  Flame,
+} from "lucide-react";
+import { Handshake } from "lucide-react";
 
 interface HeaderProps {
   activeTab: string;
@@ -22,27 +23,40 @@ interface HeaderProps {
   onLogout: () => void;
 }
 
-export default function Header({ activeTab, setActiveTab, userRole, onLogout }: HeaderProps) {
+export default function Header({
+  activeTab,
+  setActiveTab,
+  userRole,
+  onLogout,
+}: HeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const menuItems = [
-    { id: 'principala', label: 'Principala', icon: LayoutDashboard },
-    { id: 'calculator', label: 'Calculator', icon: Calculator },
-    { id: 'retete', label: 'Rețete', icon: ScrollText },
-    { id: 'dari_de_seama', label: 'Darea de Seamă', icon: FileSpreadsheet },
-    { id: 'materia_prima', label: 'Materia Primă', icon: Beef },
-    { id: 'condimente', label: 'Condimente', icon: Sprout },
-    { id: 'alte_cheltuieli', label: 'Alte Cheltuieli', icon: Coins },
-    { id: 'munca_personalului', label: 'Munca Personalului', icon: Users },
-    { id: 'produse_finale', label: 'Produse Finale', icon: Package },
+    { id: "principala", label: "Principala", icon: LayoutDashboard },
+    { id: "calculator", label: "Calculator", icon: Calculator },
+    { id: "retete", label: "Rețete", icon: ScrollText },
+    { id: "loturi_productie", label: "Loturi", icon: FileSpreadsheet },
+    { id: "parteneri", label: "Parteneri", icon: Handshake },
+    { id: "dari_de_seama", label: "Rapoarte vechi", icon: FileSpreadsheet },
+    { id: "materia_prima", label: "Materia Primă", icon: Beef },
+    { id: "condimente", label: "Condimente", icon: Sprout },
+    { id: "alte_cheltuieli", label: "Alte Cheltuieli", icon: Coins },
+    { id: "munca_personalului", label: "Munca Personalului", icon: Users },
+    { id: "produse_finale", label: "Produse Finale", icon: Package },
   ];
 
   return (
-    <header id="app-header" className="bg-stone-900 border-b border-amber-900/30 text-stone-100 sticky top-0 z-50 shadow-md">
+    <header
+      id="app-header"
+      className="bg-stone-900 border-b border-amber-900/30 text-stone-100 sticky top-0 z-50 shadow-md"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand */}
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('principala')}>
+          <div
+            className="flex items-center space-x-3 cursor-pointer"
+            onClick={() => setActiveTab("principala")}
+          >
             <div className="bg-amber-600 p-2 rounded-lg text-stone-950 flex items-center justify-center shadow-inner">
               <Flame className="h-6 w-6 animate-pulse" />
             </div>
@@ -67,9 +81,9 @@ export default function Header({ activeTab, setActiveTab, userRole, onLogout }: 
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
                   className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all duration-200 ${
-                    isActive 
-                      ? 'bg-amber-600 text-stone-950 font-semibold shadow-sm' 
-                      : 'text-stone-300 hover:bg-stone-800 hover:text-amber-500'
+                    isActive
+                      ? "bg-amber-600 text-stone-950 font-semibold shadow-sm"
+                      : "text-stone-300 hover:bg-stone-800 hover:text-amber-500"
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -82,8 +96,12 @@ export default function Header({ activeTab, setActiveTab, userRole, onLogout }: 
           {/* User Info & Logout (Desktop) */}
           <div className="hidden xl:flex items-center space-x-4">
             <div className="text-right">
-              <p className="text-xs font-semibold text-stone-200">{userRole === 'admin' ? 'Administrator' : 'Operator'}</p>
-              <span className="text-[10px] text-amber-500 font-mono">Activ</span>
+              <p className="text-xs font-semibold text-stone-200">
+                {userRole === "admin" ? "Administrator" : "Operator"}
+              </p>
+              <span className="text-[10px] text-amber-500 font-mono">
+                Activ
+              </span>
             </div>
             <button
               id="logout-button-desktop"
@@ -99,14 +117,20 @@ export default function Header({ activeTab, setActiveTab, userRole, onLogout }: 
           {/* Mobile Menu Button */}
           <div className="xl:hidden flex items-center space-x-3">
             <div className="text-right">
-              <p className="text-xs font-medium text-stone-300">{userRole === 'admin' ? 'Admin' : 'Operator'}</p>
+              <p className="text-xs font-medium text-stone-300">
+                {userRole === "admin" ? "Admin" : "Operator"}
+              </p>
             </div>
             <button
               id="mobile-menu-toggle"
               onClick={() => setIsOpen(!isOpen)}
               className="p-2 rounded-md text-stone-300 hover:text-amber-500 hover:bg-stone-800 focus:outline-none"
             >
-              {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {isOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
             </button>
           </div>
         </div>
@@ -114,7 +138,10 @@ export default function Header({ activeTab, setActiveTab, userRole, onLogout }: 
 
       {/* Mobile Menu */}
       {isOpen && (
-        <div id="mobile-menu" className="xl:hidden bg-stone-900 border-b border-amber-900/30 px-2 pt-2 pb-4 space-y-1 shadow-inner">
+        <div
+          id="mobile-menu"
+          className="xl:hidden bg-stone-900 border-b border-amber-900/30 px-2 pt-2 pb-4 space-y-1 shadow-inner"
+        >
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -127,9 +154,9 @@ export default function Header({ activeTab, setActiveTab, userRole, onLogout }: 
                   setIsOpen(false);
                 }}
                 className={`flex items-center space-x-3 w-full px-4 py-3 rounded-md text-sm font-medium transition-all ${
-                  isActive 
-                    ? 'bg-amber-600 text-stone-950 font-bold' 
-                    : 'text-stone-300 hover:bg-stone-800 hover:text-amber-500'
+                  isActive
+                    ? "bg-amber-600 text-stone-950 font-bold"
+                    : "text-stone-300 hover:bg-stone-800 hover:text-amber-500"
                 }`}
               >
                 <Icon className="h-5 w-5 shrink-0" />

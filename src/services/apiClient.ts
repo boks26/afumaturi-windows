@@ -1,6 +1,6 @@
-import {apiConfig, buildApiUrl} from '../config/api';
+import { apiConfig, buildApiUrl } from "../config/api";
 
-const TOKEN_KEY = 'afumaturi_access_token';
+const TOKEN_KEY = "afumaturi_access_token";
 
 export const tokenStorage = {
   get: () => localStorage.getItem(TOKEN_KEY),
@@ -15,7 +15,7 @@ export class ApiError extends Error {
     public readonly body?: unknown,
   ) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
   }
 }
 
@@ -24,30 +24,38 @@ export async function apiRequest<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), apiConfig.timeoutMs);
+  const timeoutId = window.setTimeout(
+    () => controller.abort(),
+    apiConfig.timeoutMs,
+  );
 
   try {
     const token = tokenStorage.get();
     const response = await fetch(buildApiUrl(path), {
       ...options,
       headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        ...(token ? {Authorization: `Bearer ${token}`} : {}),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.headers,
       },
       signal: controller.signal,
     });
 
-    const contentType = response.headers.get('content-type') ?? '';
-    const body = contentType.includes('application/json')
+    const contentType = response.headers.get("content-type") ?? "";
+    const body = contentType.includes("application/json")
       ? await response.json()
       : await response.text();
 
     if (!response.ok) {
-      const message = typeof body === 'object' && body !== null && 'error' in body
-        ? String((body as {error?: {message?: string}}).error?.message || `Cererea API a eșuat (${response.status}).`)
-        : `Cererea API a eșuat (${response.status}).`;
+      if (response.status === 401) tokenStorage.clear();
+      const message =
+        typeof body === "object" && body !== null && "error" in body
+          ? String(
+              (body as { error?: { message?: string } }).error?.message ||
+                `Cererea API a eșuat (${response.status}).`,
+            )
+          : `Cererea API a eșuat (${response.status}).`;
       throw new ApiError(message, response.status, body);
     }
 
@@ -57,14 +65,27 @@ export async function apiRequest<T>(
   }
 }
 
-export async function absoluteRequest<T>(url: string, options: RequestInit): Promise<T> {
+export async function absoluteRequest<T>(
+  url: string,
+  options: RequestInit,
+): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), apiConfig.timeoutMs);
+  const timeoutId = window.setTimeout(
+    () => controller.abort(),
+    apiConfig.timeoutMs,
+  );
   try {
-    const response = await fetch(url, {...options, signal: controller.signal});
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new ApiError(body?.error_description || `Cererea a eșuat (${response.status}).`, response.status, body);
+      throw new ApiError(
+        body?.error_description || `Cererea a eșuat (${response.status}).`,
+        response.status,
+        body,
+      );
     }
     return body as T;
   } finally {

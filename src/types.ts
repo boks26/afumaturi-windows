@@ -1,4 +1,4 @@
-export type ResourceBundle = 'materie_prima' | 'condiment' | 'alta_cheltuiala';
+export type ResourceBundle = "materie_prima" | "condiment" | "alta_cheltuiala";
 
 export interface Resource {
   id: string;
@@ -13,7 +13,7 @@ export interface Resource {
 export interface StockMovement {
   id: string;
   resourceId: string;
-  type: 'intrare' | 'iesire';
+  type: "intrare" | "iesire";
   quantity: number;
   priceUnit?: number; // only for 'intrare'
   date: string;
@@ -30,7 +30,8 @@ export interface Employee {
   active: boolean;
 }
 
-export type RecipeLineType = 'materie_prima' | 'condiment' | 'subreteta' | 'alta_cheltuiala' | 'manopera';
+export type RecipeLineType =
+  "materie_prima" | "condiment" | "subreteta" | "alta_cheltuiala" | "manopera";
 
 export interface RecipeLine {
   id: string;
@@ -46,7 +47,7 @@ export interface Recipe {
   label: string;
   categoryId: string; // reference to category
   isSubRecipe: boolean; // e.g., marinade or brine is subrecipe
-  baseUnit: 'kg' | 'buc';
+  baseUnit: "kg" | "buc";
   defaultMarkup: number; // percentage, e.g., 70 for 70%
   lines: RecipeLine[];
 }
@@ -73,10 +74,146 @@ export interface ProductionReport {
   sellingPriceReal: number; // actual selling price entered
   income: number; // sellingPriceReal * outputQty
   profit: number; // income - calculatedTotalCostInput
-  status: 'draft' | 'finalizat';
+  status: "draft" | "finalizat";
 }
 
 export interface Category {
   id: string;
   name: string;
+}
+
+export type PartyRole = "customer" | "supplier";
+export type ProductionMode = "own_production" | "custom_processing";
+export type JobStatus = "draft" | "in_progress" | "completed" | "cancelled";
+export type MaterialOwnership = "producer" | "customer";
+export type PricingBasis = "input_qty" | "output_qty" | "fixed";
+export type ChargeType =
+  | "processing_fee"
+  | "labor"
+  | "ingredient"
+  | "packaging"
+  | "smoking"
+  | "utility"
+  | "other"
+  | "adjustment";
+export type ChargeDirection = "receivable" | "expense" | "adjustment";
+
+export interface Party {
+  id: string;
+  name: string;
+  roles: PartyRole[];
+  phone?: string | null;
+  email?: string | null;
+  notes?: string | null;
+  active: boolean;
+}
+
+export interface JobInput {
+  id: string;
+  resourceId?: string | null;
+  resourceLabel: string;
+  quantity: number;
+  unit: string;
+  unitCost: number;
+  totalCost: number;
+  ownership: MaterialOwnership;
+  suppliedByPartyId?: string | null;
+}
+
+export interface JobCharge {
+  id: string;
+  type: ChargeType;
+  description: string;
+  quantity?: number | null;
+  unitPrice?: number | null;
+  amount: number;
+  direction: ChargeDirection;
+  effect?: "increase" | "decrease" | null;
+  needsReview?: boolean;
+}
+
+export interface JobTotals {
+  producerMaterialCost: number;
+  customerMaterialQty: number;
+  expenses: number;
+  receivable: number;
+  adjustments: number;
+  netReceivable: number;
+  paid: number;
+  balance: number;
+  margin: number;
+}
+
+export interface Payment {
+  id: string;
+  partyId: string;
+  jobId?: string | null;
+  date: string;
+  amount: number;
+  direction: "incoming" | "outgoing";
+  method: "cash" | "bank" | "card" | "other";
+  note?: string | null;
+  status: "posted" | "voided";
+}
+
+export interface ProductionJob {
+  id: string;
+  name: string;
+  date: string;
+  mode: ProductionMode;
+  partyId?: string | null;
+  productId: string;
+  recipeId: string;
+  inputQty: number;
+  outputQty?: number | null;
+  unit: string;
+  yieldPercent?: number | null;
+  lossPercent?: number | null;
+  pricingBasis?: PricingBasis | null;
+  processingRate?: number | null;
+  status: JobStatus;
+  inputs: JobInput[];
+  charges: JobCharge[];
+  totals: JobTotals;
+  payments: Payment[];
+  notes?: string | null;
+  sourceKey?: string | null;
+}
+
+export interface OwnershipOverride {
+  resourceId: string;
+  ownership: MaterialOwnership;
+  suppliedByPartyId?: string | null;
+}
+
+export interface JobChargeInput extends Omit<JobCharge, "id" | "needsReview"> {}
+
+export interface ProductionJobInput {
+  name: string;
+  date: string;
+  mode: ProductionMode;
+  partyId?: string | null;
+  productId: string;
+  recipeId: string;
+  inputQty: number;
+  outputQty?: number | null;
+  unit: string;
+  pricingBasis?: PricingBasis | null;
+  processingRate?: number | null;
+  status?: Exclude<JobStatus, "completed">;
+  ownershipOverrides?: OwnershipOverride[];
+  charges?: JobChargeInput[];
+  notes?: string | null;
+}
+
+export type PartyInput = Omit<Party, "id">;
+export type PaymentInput = Omit<Payment, "id" | "status">;
+
+export interface PartyStatement {
+  party: Party;
+  jobs: ProductionJob[];
+  payments: Payment[];
+  totalReceivable: number;
+  totalPaid: number;
+  balance: number;
 }
