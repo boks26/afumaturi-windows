@@ -1,0 +1,6 @@
+{
+  "name": "Afumaturi de la Nanu",
+  "description": "Aplicatie pentru gestiunea retetelor, stocurilor, calculatorului de costuri si darilor de seama pentru afumaturi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
