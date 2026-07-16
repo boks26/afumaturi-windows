@@ -1,0 +1,7 @@
+* text=auto
+
+*.toml text eol=lf
+Cargo.lock text eol=lf
+package-lock.json text eol=lf
+*.json text eol=lf
+*.ps1 text eol=crlf

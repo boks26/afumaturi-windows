@@ -26,10 +26,18 @@ function Invoke-Checked {
     }
 }
 
-foreach ($command in @("npm.cmd", "rustup.exe", "scp.exe", "ssh.exe")) {
+foreach ($command in @("git.exe", "npm.cmd", "rustup.exe", "scp.exe", "ssh.exe")) {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
         throw "Comanda $command nu este disponibilă în PATH."
     }
+}
+
+$workingTreeChanges = @(& git.exe status --porcelain)
+if ($LASTEXITCODE -ne 0) {
+    throw "Starea repository-ului Git nu a putut fi verificată."
+}
+if ($workingTreeChanges.Count -gt 0) {
+    throw "Repository-ul conține modificări nepublicate. Rulează git status și salvează-le înainte de release.`n$($workingTreeChanges -join "`n")"
 }
 
 foreach ($file in @($SshKeyPath, $SigningKeyPath)) {
