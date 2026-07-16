@@ -149,7 +149,11 @@ export const authApi = {
         }),
       },
     );
-    tokenStorage.set(token.access_token);
+    tokenStorage.set(
+      token.access_token,
+      token.refresh_token,
+      token.expires_in,
+    );
     try {
       return await this.me();
     } catch (error) {
@@ -167,7 +171,7 @@ export const authApi = {
       tokenStorage.clear();
     }
   },
-  hasToken: () => Boolean(tokenStorage.get()),
+  hasToken: () => Boolean(tokenStorage.get() || tokenStorage.getRefresh()),
 };
 
 export const catalogApi = {
