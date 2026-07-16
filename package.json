@@ -15,7 +15,10 @@
     "tauri:build:x64": "tauri build --target x86_64-pc-windows-msvc --bundles nsis",
     "tauri:build:x86": "tauri build --target i686-pc-windows-msvc --bundles nsis",
     "tauri:build:arm64": "tauri build --target aarch64-pc-windows-msvc --bundles nsis",
-    "release:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-windows.ps1"
+    "release:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-windows.ps1",
+    "tauri:android:init": "tauri android init",
+    "tauri:android:dev": "tauri android dev",
+    "tauri:android:build": "tauri android build"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

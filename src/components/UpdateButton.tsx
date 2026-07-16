@@ -3,13 +3,16 @@ import { Check, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
 
 type UpdateState = "idle" | "checking" | "downloading" | "current" | "error";
 
-const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+const isDesktopTauri = () =>
+  typeof window !== "undefined" &&
+  "__TAURI_INTERNALS__" in window &&
+  !/Android|iPhone|iPad|iPod/i.test(window.navigator.userAgent);
 
 export default function UpdateButton({ mobile = false }: { mobile?: boolean }) {
   const [state, setState] = useState<UpdateState>("idle");
   const [message, setMessage] = useState("Verifică actualizări");
 
-  if (!isTauri()) return null;
+  if (!isDesktopTauri()) return null;
 
   const checkForUpdate = async () => {
     if (state === "checking" || state === "downloading") return;
