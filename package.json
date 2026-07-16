@@ -18,7 +18,8 @@
     "release:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-windows.ps1",
     "tauri:android:init": "tauri android init",
     "tauri:android:dev": "tauri android dev",
-    "tauri:android:build": "tauri android build"
+    "tauri:android:build": "tauri android build",
+    "release:android": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release-android.ps1"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
