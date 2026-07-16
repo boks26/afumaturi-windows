@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
-import { CheckCircle, Eye, Factory, Plus, Trash2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Beef, CheckCircle, Coins, Eye, Factory, Play, Plus, Sprout, Trash2, Users } from "lucide-react";
 import {
   FinalProduct,
+  Employee,
   JobChargeInput,
   PaymentInput,
   Party,
@@ -11,8 +12,10 @@ import {
   ProductionMode,
   Recipe,
   Resource,
+  SubrecipeStock,
 } from "../types";
-import { paymentApi, productionJobApi } from "../services/desktopApi";
+import { boardApi, paymentApi, productionJobApi } from "../services/desktopApi";
+import { scaleRecipeIngredients } from "../utils/calculations";
 
 interface Props {
   jobs: ProductionJob[];
@@ -20,6 +23,7 @@ interface Props {
   products: FinalProduct[];
   recipes: Recipe[];
   resources: Resource[];
+  employees: Employee[];
   onChanged: (reloadStock?: boolean) => Promise<void>;
   onError: (message: string) => void;
 }
@@ -50,6 +54,7 @@ export default function ProductionJobsManager({
   products,
   recipes,
   resources,
+  employees,
   onChanged,
   onError,
 }: Props) {
@@ -57,6 +62,7 @@ export default function ProductionJobsManager({
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<ProductionJob | null>(null);
   const [busy, setBusy] = useState(false);
+  const [subrecipeStocks, setSubrecipeStocks] = useState<SubrecipeStock[]>([]);
   const [mode, setMode] = useState<ProductionMode | "">("");
   const [status, setStatus] = useState("");
   const [partyFilter, setPartyFilter] = useState("");
@@ -90,6 +96,59 @@ export default function ProductionJobsManager({
       ),
     [jobs, mode, status, partyFilter, search, dateFrom, dateTo],
   );
+  const selectedProduct = useMemo(
+    () => products.find((product) => product.id === form.productId),
+    [products, form.productId],
+  );
+  const recipesForProduct = (productId: string) => {
+    const product = products.find((item) => item.id === productId);
+    if (!product) return [];
+    return recipes.filter((recipe) => !recipe.isSubRecipe && (recipe.id === product.recipeId || recipe.productId === product.id));
+  };
+  const eligibleProducts = useMemo(
+    () => products.filter((product) => recipesForProduct(product.id).length > 0),
+    [products, recipes],
+  );
+  const availableRecipes = useMemo(
+    () => recipesForProduct(form.productId),
+    [form.productId, products, recipes],
+  );
+  const selectedRecipe = useMemo(
+    () => recipes.find((recipe) => recipe.id === form.recipeId),
+    [recipes, form.recipeId],
+  );
+  const recipePreview = useMemo(
+    () => form.recipeId && form.inputQty > 0
+      ? scaleRecipeIngredients(form.recipeId, form.inputQty, recipes, resources, employees)
+      : null,
+    [form.recipeId, form.inputQty, recipes, resources, employees],
+  );
+
+  useEffect(() => {
+    if (!selectedProduct || !form.inputQty || !form.date) return;
+    const displayDate = form.date.split("-").reverse().join(".");
+    const generatedName = `${selectedProduct.label} - ${qty.format(form.inputQty)} ${selectedRecipe?.baseUnit || form.unit} - ${displayDate}`;
+    if (form.name !== generatedName) {
+      setForm((current) => ({ ...current, name: generatedName }));
+    }
+  }, [selectedProduct, selectedRecipe, form.inputQty, form.date, form.unit, form.name]);
+
+  useEffect(() => {
+    if (form.mode !== "custom_processing" || !recipePreview) return;
+    const resourceIds = [...new Set([
+      ...recipePreview.materiePrima,
+      ...recipePreview.condimente,
+      ...recipePreview.condimenteRecete,
+    ].map((item) => item.resourceId))];
+    setForm((current) => ({
+      ...current,
+      ownershipOverrides: resourceIds.map((resourceId) => ({
+        resourceId,
+        ownership: "customer" as const,
+        suppliedByPartyId: current.partyId,
+      })),
+    }));
+  }, [form.mode, form.partyId, recipePreview]);
   const serviceAmount =
     form.mode === "custom_processing"
       ? form.pricingBasis === "fixed"
@@ -100,6 +159,26 @@ export default function ProductionJobsManager({
               : form.inputQty,
           ) * Number(form.processingRate || 0)
       : 0;
+  const openCreate = async () => {
+    setForm(initial());
+    setOpen(true);
+    try { setSubrecipeStocks(await boardApi.subrecipeStocks()); }
+    catch (error) { onError(error instanceof Error ? error.message : "Stocul subrețetelor nu a putut fi încărcat."); }
+  };
+  const produceSubrecipe = async (recipeId: string, suggestedQuantity: number) => {
+    const entered = prompt("Cantitatea nouă produsă:", String(suggestedQuantity));
+    if (entered === null) return;
+    const amount = Number(entered);
+    if (!Number.isFinite(amount) || amount <= 0) { onError("Cantitatea trebuie să fie pozitivă."); return; }
+    setBusy(true);
+    try {
+      await boardApi.produceSubrecipe(recipeId, amount, form.date);
+      setSubrecipeStocks(await boardApi.subrecipeStocks());
+      await onChanged(true);
+    }
+    catch (error) { onError(error instanceof Error ? error.message : "Subrețeta nu a putut fi produsă."); }
+    finally { setBusy(false); }
+  };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
@@ -161,24 +240,13 @@ export default function ProductionJobsManager({
       setBusy(false);
     }
   };
-  const toggleCustomerResource = (id: string) =>
-    setForm((old) => {
-      const items = old.ownershipOverrides || [];
-      const exists = items.some((x) => x.resourceId === id);
-      return {
-        ...old,
-        ownershipOverrides: exists
-          ? items.filter((x) => x.resourceId !== id)
-          : [
-              ...items,
-              {
-                resourceId: id,
-                ownership: "customer",
-                suppliedByPartyId: old.partyId,
-              },
-            ],
-      };
-    });
+  const startProduction = async (job: ProductionJob) => {
+    if (!confirm(`Porniți producția pentru „${job.name}”? Ingredientele producătorului vor fi scăzute acum din stoc.`)) return;
+    setBusy(true);
+    try { const updated = await productionJobApi.start(job.id); setSelected(updated); await onChanged(true); }
+    catch (error) { onError(error instanceof Error ? error.message : "Lotul nu a putut fi pornit."); }
+    finally { setBusy(false); }
+  };
   const addCharge = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selected || selected.status === "completed") return;
@@ -221,6 +289,7 @@ export default function ProductionJobsManager({
         method: jobPayment.method,
       });
       setSelected(await productionJobApi.get(selected.id));
+      setJobPayment({ amount: 0, date: new Date().toISOString().slice(0, 10), method: "cash" });
       await onChanged();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Plata nu a putut fi salvată.");
@@ -238,7 +307,7 @@ export default function ProductionJobsManager({
           </p>
         </div>
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => void openCreate()}
           className="rounded bg-amber-600 px-4 py-2 font-bold text-stone-950"
         >
           <Plus className="mr-2 inline h-4 w-4" />
@@ -296,7 +365,6 @@ export default function ProductionJobsManager({
           <option value="draft">Draft</option>
           <option value="in_progress">În lucru</option>
           <option value="completed">Finalizat</option>
-          <option value="cancelled">Anulat</option>
         </select>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -316,7 +384,7 @@ export default function ProductionJobsManager({
               </div>
               <span className="text-xs">{j.status}</span>
             </div>
-            <div className="mt-3 grid grid-cols-3 text-sm">
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
               <span>
                 Intrare
                 <br />
@@ -329,9 +397,19 @@ export default function ProductionJobsManager({
                 <br />
                 <b>
                   {j.outputQty == null
-                    ? "În lucru"
+                    ? j.status === "completed" ? "Necunoscută (istoric)" : "În lucru"
                     : `${qty.format(j.outputQty)} ${j.unit}`}
                 </b>
+              </span>
+              <span>
+                De încasat
+                <br />
+                <b>{money.format(j.totals.netReceivable)}</b>
+              </span>
+              <span>
+                Încasat
+                <br />
+                <b className="text-emerald-500">{money.format(j.totals.paid)}</b>
               </span>
               <span>
                 Sold
@@ -346,7 +424,10 @@ export default function ProductionJobsManager({
               >
                 <Eye className="h-4 w-4" />
               </button>
-              {j.status !== "completed" && (
+              {j.status === "draft" && (
+                <button disabled={busy} onClick={() => void startProduction(j)} className="rounded bg-blue-700 px-3 py-2" title="Pornește producția și consumă ingredientele"><Play className="h-4 w-4" /></button>
+              )}
+              {j.status === "in_progress" && (
                 <button
                   disabled={busy}
                   onClick={() => void finalize(j)}
@@ -379,10 +460,10 @@ export default function ProductionJobsManager({
         )}
       </div>
       {open && (
-        <div className="fixed inset-0 z-50 overflow-auto bg-black/70 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <form
             onSubmit={submit}
-            className="mx-auto max-w-3xl space-y-5 rounded-xl bg-stone-900 p-6"
+            className="w-full max-w-3xl space-y-5 rounded-xl bg-stone-900 p-6"
           >
             <h3 className="text-xl font-bold">Lot nou</h3>
             <div>
@@ -418,8 +499,9 @@ export default function ProductionJobsManager({
                 required
                 placeholder="Denumirea lotului"
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="rounded bg-stone-950 p-3"
+                readOnly
+                title="Denumirea este generată automat"
+                className="rounded bg-stone-950 p-3 text-stone-300"
               />
               <input
                 type="date"
@@ -455,34 +537,27 @@ export default function ProductionJobsManager({
                 value={form.productId}
                 onChange={(e) => {
                   const p = products.find((x) => x.id === e.target.value);
+                  const linkedRecipes = recipesForProduct(e.target.value);
+                  const recipe = linkedRecipes.find((item) => item.id === p?.recipeId) || linkedRecipes[0];
                   setForm({
                     ...form,
                     productId: e.target.value,
-                    recipeId: p?.recipeId || "",
+                    recipeId: recipe?.id || "",
+                    unit: recipe?.baseUnit || "kg",
                   });
                 }}
                 className="rounded bg-stone-950 p-3"
               >
                 <option value="">Produs</option>
-                {products.map((p) => (
+                {eligibleProducts.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
                   </option>
                 ))}
               </select>
-              <select
-                required
-                value={form.recipeId}
-                onChange={(e) => setForm({ ...form, recipeId: e.target.value })}
-                className="rounded bg-stone-950 p-3"
-              >
-                <option value="">Rețetă</option>
-                {recipes.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
+              {availableRecipes.length > 1 ? <select required value={form.recipeId} onChange={(e) => { const recipe = availableRecipes.find((item) => item.id === e.target.value); setForm({ ...form, recipeId: e.target.value, unit: recipe?.baseUnit || "kg" }); }} className="rounded bg-stone-950 p-3" aria-label="Alege rețeta pentru produs">
+                {availableRecipes.map((recipe) => <option key={recipe.id} value={recipe.id}>{recipe.label}</option>)}
+              </select> : <div className="rounded border border-stone-800 bg-stone-950/50 p-3 text-sm"><span className="text-xs text-stone-500">Rețeta folosită automat</span><br /><b>{availableRecipes[0]?.label || "Produs fără rețetă"}</b></div>}
               <input
                 required
                 type="number"
@@ -495,47 +570,67 @@ export default function ProductionJobsManager({
                 }
                 className="rounded bg-stone-950 p-3"
               />
-              <input
-                type="number"
-                min="0.0001"
-                step="0.0001"
-                placeholder="Cantitate ieșire (opțional)"
-                value={form.outputQty || ""}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    outputQty: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-                className="rounded bg-stone-950 p-3"
-              />
+              <div className="rounded border border-stone-800 bg-stone-950/50 p-3 text-sm text-stone-400"><b className="text-stone-200">Cantitatea obținută</b><br />Se completează la închiderea lotului, după producție.</div>
             </div>
+            {products.length > eligibleProducts.length && <p className="rounded border border-amber-700/30 bg-amber-950/30 p-3 text-sm text-amber-400">{products.length - eligibleProducts.length} {products.length - eligibleProducts.length === 1 ? "produs nu apare" : "produse nu apar"} în listă deoarece nu au nicio rețetă asociată.</p>}
             {form.outputQty && form.outputQty > form.inputQty && (
               <p className="text-sm text-amber-400">
                 Atenție: ieșirea depășește intrarea.
               </p>
             )}
+            <div className="space-y-3 rounded-xl border border-stone-700 bg-stone-950/40 p-4">
+                  <div>
+                    <p className="font-bold">{form.mode === "custom_processing" ? "Rețeta și materialele clientului" : "Rețeta și necesarul de producție"}</p>
+                    <p className="text-xs text-stone-400">Cantități și costuri calculate automat pentru lotul introdus.</p>
+                  </div>
+                  {recipePreview ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {[{ title: "Materie primă", icon: Beef, items: recipePreview.materiePrima }, { title: "Condimente directe", icon: Sprout, items: recipePreview.condimente }].map(({ title, icon: Icon, items }) => (
+                        <section key={title} className="rounded-lg border border-stone-800 bg-stone-900 p-3">
+                          <h4 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-amber-500"><Icon className="h-4 w-4" />{title}</h4>
+                          {(items.length || title === "Condimente directe" && recipePreview.subrecipes.length) ? <>
+                          {items.map((item) => (
+                            <div key={`${title}-${item.resourceId}`} className="flex justify-between border-b border-stone-800/50 py-1.5 text-sm last:border-0">
+                              <span>{item.label}</span><b className="font-mono">{qty.format(item.quantity)} {item.unit}</b>
+                            </div>
+                          ))}
+                          {title === "Condimente directe" && recipePreview.subrecipes.map((subrecipe) => {
+                            const stocked = subrecipeStocks.find((item) => item.recipeId === subrecipe.recipeId);
+                            const unitCost = stocked?.stock ? stocked.currentPrice : subrecipe.unitCost;
+                            return <div key={`ingredient-${subrecipe.recipeId}`} className="border-b border-stone-800/50 py-1.5 text-sm last:border-0"><div className="flex justify-between"><span>{subrecipe.label} <small className="text-amber-500">(subrețetă)</small></span><b className="font-mono">{qty.format(subrecipe.quantity)} {subrecipe.unit}</b></div><div className="mt-1 flex justify-between text-xs text-stone-500"><span>{stocked?.stock ? "Cost mediu real din stoc" : "Cost calculat din rețetă"}</span><span>{money.format(unitCost)}/{subrecipe.unit} · {money.format(unitCost * subrecipe.quantity)}</span></div></div>;
+                          })}
+                          </> : <p className="text-xs text-stone-500">Fără poziții.</p>}
+                        </section>
+                      ))}
+                      {recipePreview.subrecipes.map((subrecipe) => {
+                        const stocked = subrecipeStocks.find((item) => item.recipeId === subrecipe.recipeId);
+                        const missing = Math.max(0, subrecipe.quantity - Number(stocked?.stock || 0));
+                        return (
+                          <section key={`${subrecipe.recipeId}-${subrecipe.quantity}`} className="rounded-lg border border-amber-700/40 bg-stone-900 p-3 md:col-span-2">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-stone-800 pb-2">
+                              <div><h4 className="font-bold text-amber-500">Subrețetă: {subrecipe.label}</h4><p className="text-xs text-stone-400">Necesar {qty.format(subrecipe.quantity)} {subrecipe.unit} · În stoc {qty.format(stocked?.stock || 0)} {stocked?.unit || subrecipe.unit}</p></div>
+                              <button type="button" disabled={busy} onClick={() => void produceSubrecipe(subrecipe.recipeId, missing || subrecipe.quantity)} className="rounded bg-emerald-700 px-3 py-2 text-xs font-bold text-white">Produce și adaugă în stoc</button>
+                            </div>
+                            {missing > 0 && <p className="mb-2 rounded bg-amber-950/50 p-2 text-xs text-amber-400">Lipsesc {qty.format(missing)} {subrecipe.unit}. La pornirea lotului, stocul poate deveni negativ.</p>}
+                            <p className="mb-1 text-xs font-bold uppercase text-stone-400">Condimente necesare pentru preparare</p>
+                            {subrecipe.condimente.map((item) => <div key={item.resourceId} className="flex justify-between py-1 text-sm"><span>{item.label}</span><b>{qty.format(item.quantity)} {item.unit}</b></div>)}
+                          </section>
+                        );
+                      })}
+                      <section className="rounded-lg border border-stone-800 bg-stone-900 p-3">
+                        <h4 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-stone-400"><Coins className="h-4 w-4" />Alte cheltuieli</h4>
+                        {recipePreview.alteCheltuieli.length ? recipePreview.alteCheltuieli.map((item) => <div key={item.resourceId} className="flex justify-between py-1.5 text-sm"><span>{item.label}</span><span>{qty.format(item.quantity)} {item.unit}</span></div>) : <p className="text-xs text-stone-500">Fără poziții.</p>}
+                      </section>
+                      <section className="rounded-lg border border-stone-800 bg-stone-900 p-3">
+                        <h4 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-stone-400"><Users className="h-4 w-4" />Manoperă</h4>
+                        {recipePreview.muncaPersonal.length ? recipePreview.muncaPersonal.map((item) => <div key={`${item.employeeId}-${item.recipeLabel}`} className="flex justify-between py-1.5 text-sm"><span>{item.name}</span><span>{qty.format(item.quantity)}</span></div>) : <p className="text-xs text-stone-500">Fără poziții.</p>}
+                      </section>
+                      <section className="rounded-lg border border-amber-700/40 bg-amber-950/30 p-3 md:col-span-2"><div className="flex items-center justify-between"><span className="font-bold">Cost total calculat al lotului</span><strong className="text-lg text-amber-500">{money.format(recipePreview.totals.grandTotal)}</strong></div><p className="mt-1 text-xs text-stone-500">Ingrediente, subrețete, cheltuieli și manoperă pentru cantitatea introdusă.</p></section>
+                    </div>
+                  ) : <p className="rounded bg-stone-900 p-3 text-sm text-stone-400">Selectați produsul și introduceți cantitatea pentru a vedea rețeta.</p>}
+                </div>
             {form.mode === "custom_processing" && (
               <>
-                <div>
-                  <p className="mb-2 font-bold">Materiale aduse de client</p>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {resources
-                      .filter((r) => r.bundle !== "alta_cheltuiala")
-                      .map((r) => (
-                        <label key={r.id} className="rounded bg-stone-950 p-2">
-                          <input
-                            type="checkbox"
-                            checked={form.ownershipOverrides?.some(
-                              (x) => x.resourceId === r.id,
-                            )}
-                            onChange={() => toggleCustomerResource(r.id)}
-                          />{" "}
-                          {r.label}
-                        </label>
-                      ))}
-                  </div>
-                </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <select
                     required
@@ -582,7 +677,7 @@ export default function ProductionJobsManager({
               className="w-full rounded bg-stone-950 p-3"
             />
             <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setOpen(false)}>
+              <button type="button" onClick={() => { setOpen(false); setForm(initial()); }}>
                 Renunță
               </button>
               <button
@@ -596,8 +691,8 @@ export default function ProductionJobsManager({
         </div>
       )}
       {selected && (
-        <div className="fixed inset-0 z-50 overflow-auto bg-black/70 p-6">
-          <div className="mx-auto max-w-4xl space-y-5 rounded-xl bg-stone-900 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-4xl space-y-5 rounded-xl bg-stone-900 p-6">
             <div className="flex justify-between">
               <div>
                 <p className="text-xs text-amber-500">
@@ -609,11 +704,12 @@ export default function ProductionJobsManager({
               </div>
               <button onClick={() => setSelected(null)}>Închide</button>
             </div>
-            <section className="grid gap-3 sm:grid-cols-4">
+            <section className="grid gap-3 sm:grid-cols-5">
               {[
                 ["Cost producător", selected.totals.producerMaterialCost],
                 ["Cheltuieli", selected.totals.expenses],
                 ["De încasat", selected.totals.netReceivable],
+                ["Încasat", selected.totals.paid],
                 ["Sold", selected.totals.balance],
               ].map(([l, v]) => (
                 <div key={String(l)} className="rounded bg-stone-950 p-3">
@@ -734,8 +830,9 @@ export default function ProductionJobsManager({
               <section className="space-y-2">
                 <h4 className="font-bold">Serviciu facturat, plăți și sold</h4>
                 {selected.payments.map((item) => (
-                  <div key={item.id} className="rounded bg-stone-950 p-3">
-                    {item.date} · {money.format(item.amount)} · {item.status}
+                  <div key={item.id} className="flex justify-between rounded bg-stone-950 p-3">
+                    <span>{item.date} · {item.method} · {item.status === "posted" ? "înregistrată" : "anulată"}</span>
+                    <b className={item.direction === "incoming" ? "text-emerald-500" : "text-red-400"}>{item.direction === "incoming" ? "+ " : "− "}{money.format(item.amount)}</b>
                   </div>
                 ))}
                 <form
@@ -793,13 +890,16 @@ export default function ProductionJobsManager({
                 Proveniență: {selected.sourceKey}
               </p>
             )}
-            {selected.status !== "completed" && (
+            {selected.status === "draft" && (
+              <button disabled={busy} onClick={() => void startProduction(selected)} className="rounded bg-blue-700 px-4 py-2 font-bold text-white"><Play className="mr-2 inline h-4 w-4" />Pornește producția</button>
+            )}
+            {selected.status === "in_progress" && (
               <button
                 disabled={busy}
                 onClick={() => void finalize(selected)}
                 className="rounded bg-emerald-700 px-4 py-2 font-bold"
               >
-                Finalizează
+                Închide lotul și adaugă produsul în stoc
               </button>
             )}
           </div>

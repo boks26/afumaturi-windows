@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Flame, Shield, AlertTriangle } from "lucide-react";
+import { Flame, Shield, AlertTriangle, Moon, Sun } from "lucide-react";
 
 // Core domain components
 import Header from "./components/Header";
@@ -10,13 +10,12 @@ import ProductsManager from "./components/ProductsManager";
 import StaffManager from "./components/StaffManager";
 import RecipesManager from "./components/RecipesManager";
 import Calculator from "./components/Calculator";
-import ReportsManager from "./components/ReportsManager";
+import ProductSalesManager from "./components/ProductSalesManager";
 import PartiesManager from "./components/PartiesManager";
 import ProductionJobsManager from "./components/ProductionJobsManager";
 import ProductionDashboard from "./components/ProductionDashboard";
 
 import {
-  Category,
   Resource,
   Employee,
   Recipe,
@@ -36,6 +35,9 @@ import {
 import { ApiError } from "./services/apiClient";
 
 export default function App() {
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    localStorage.getItem("afumaturi-theme") === "light" ? "light" : "dark",
+  );
   // Navigation & Role states
   const [activeTab, setActiveTab] = useState<string>("principala");
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -46,7 +48,6 @@ export default function App() {
   const [password, setPassword] = useState("");
 
   // Master persistent states
-  const [categories, setCategories] = useState<Category[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -55,6 +56,26 @@ export default function App() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [productionJobs, setProductionJobs] = useState<ProductionJob[]>([]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    localStorage.setItem("afumaturi-theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const preventNumberWheel = (event: WheelEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === "number" && document.activeElement === target) {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("wheel", preventNumberWheel, { passive: false, capture: true });
+    return () => document.removeEventListener("wheel", preventNumberWheel, { capture: true });
+  }, []);
+
+  const toggleTheme = () =>
+    setTheme((value) => (value === "dark" ? "light" : "dark"));
 
   const roleFromApi = (roles: string[]) =>
     roles.includes("administrator") || roles.includes("admin")
@@ -66,7 +87,6 @@ export default function App() {
     setApiError(null);
     try {
       const [
-        apiCategories,
         apiRecipes,
         apiProducts,
         apiResources,
@@ -74,7 +94,6 @@ export default function App() {
         apiReports,
         apiMovements,
       ] = await Promise.all([
-        catalogApi.categories(),
         catalogApi.recipes(),
         catalogApi.products(),
         boardApi.resources(),
@@ -82,7 +101,6 @@ export default function App() {
         boardApi.reports(),
         boardApi.movements(),
       ]);
-      setCategories(apiCategories);
       setRecipes(apiRecipes);
       setProducts(apiProducts);
       setResources(apiResources);
@@ -149,7 +167,6 @@ export default function App() {
   const handleLogout = async () => {
     await authApi.logout().catch(() => undefined);
     setUserRole(null);
-    setCategories([]);
     setResources([]);
     setRecipes([]);
     setEmployees([]);
@@ -226,6 +243,18 @@ export default function App() {
           ? error.message
           : "Intrarea în stoc nu a putut fi salvată.",
       );
+    }
+  };
+
+  const handleBulkStockImport = async (data: import("./types").BulkStockImport) => {
+    try {
+      const result = await boardApi.bulkReceiveResources(data);
+      const updated = new Map(result.items.map((item) => [item.resource.id, item.resource]));
+      setResources((previous) => previous.map((resource) => updated.get(resource.id) || resource));
+      setMovements((previous) => [...result.items.map((item) => item.movement), ...previous]);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Importul multiplu nu a putut fi salvat.");
+      throw error;
     }
   };
 
@@ -459,6 +488,9 @@ export default function App() {
         id="lock-screen-wrapper"
         className="min-h-screen bg-stone-950 flex items-center justify-center p-4 relative overflow-hidden selection:bg-amber-500 selection:text-stone-950"
       >
+        <button onClick={toggleTheme} className="fixed right-4 top-4 z-20 rounded-lg border border-stone-700 bg-stone-900 p-2.5 text-stone-300 shadow-lg hover:text-amber-500" aria-label="Schimbă tema" title={theme === "dark" ? "Tema de zi" : "Tema de noapte"}>
+          {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </button>
         {/* Abstract background blobs */}
         <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-amber-600/10 to-transparent rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-96 h-96 bg-gradient-to-tl from-red-600/10 to-transparent rounded-full blur-3xl pointer-events-none" />
@@ -537,6 +569,7 @@ export default function App() {
             jobs={productionJobs}
             products={products}
             resources={resources}
+            reports={reports}
             setActiveTab={setActiveTab}
           />
         );
@@ -555,7 +588,6 @@ export default function App() {
             recipes={recipes}
             resources={resources}
             employees={employees}
-            categories={categories}
             onAddRecipe={handleAddRecipe}
             onEditRecipe={handleEditRecipe}
             onDeleteRecipe={handleDeleteRecipe}
@@ -569,6 +601,7 @@ export default function App() {
             products={products}
             recipes={recipes}
             resources={resources}
+            employees={employees}
             onChanged={async (reloadStock) => {
               const [newJobs, newParties] = await Promise.all([
                 productionJobApi.list(),
@@ -606,16 +639,7 @@ export default function App() {
         );
       case "dari_de_seama":
         return (
-          <ReportsManager
-            reports={reports}
-            products={products}
-            recipes={recipes}
-            resources={resources}
-            employees={employees}
-            onAddReport={handleAddReport}
-            onEditReport={handleEditReport}
-            onDeleteReport={handleDeleteReport}
-          />
+          <ProductSalesManager products={products} onError={setApiError} onChanged={async()=>{setProducts(await catalogApi.products());}} />
         );
       case "materia_prima":
         return (
@@ -634,13 +658,12 @@ export default function App() {
         return (
           <SpicesManager
             resources={resources}
-            onAddResource={(res) =>
-              handleAddResource({ ...res, bundle: "condiment" })
-            }
+            onAddResource={handleAddResource}
             onEditResource={handleEditResource}
             onDeleteResource={handleDeleteResource}
             onAddStock={handleAddStock}
             onRemoveStock={handleRemoveStock}
+            onBulkImport={handleBulkStockImport}
           />
         );
       case "alte_cheltuieli":
@@ -696,6 +719,8 @@ export default function App() {
         setActiveTab={setActiveTab}
         userRole={userRole}
         onLogout={handleLogout}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main app grid area */}

@@ -9,17 +9,20 @@ import {
   MinusCircle, 
   Calendar, 
   Tag, 
-  DollarSign 
+  DollarSign,
+  FileInput
 } from 'lucide-react';
-import { Resource } from '../types';
+import { BulkStockImport, Resource } from '../types';
+import BulkStockImportModal from './BulkStockImportModal';
 
 interface SpicesManagerProps {
   resources: Resource[];
-  onAddResource: (resource: Omit<Resource, 'id' | 'bundle'>) => void;
+  onAddResource: (resource: Omit<Resource, 'id'>) => void;
   onEditResource: (id: string, resource: Partial<Resource>) => void;
   onDeleteResource: (id: string) => void;
   onAddStock: (id: string, qty: number, price?: number) => void;
   onRemoveStock: (id: string, qty: number) => void;
+  onBulkImport: (data: BulkStockImport) => Promise<void>;
 }
 
 export default function SpicesManager({
@@ -29,20 +32,23 @@ export default function SpicesManager({
   onDeleteResource,
   onAddStock,
   onRemoveStock,
+  onBulkImport,
 }: SpicesManagerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isStockOpen, setIsStockOpen] = useState(false);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [stockActionType, setStockActionType] = useState<'add' | 'remove'>('add');
 
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
 
   // Form states
   const [name, setName] = useState('');
-  const [unit, setUnit] = useState('kg');
+  const [unit, setUnit] = useState('g');
   const [price, setPrice] = useState(0);
   const [initialStock, setInitialStock] = useState(0);
+  const [resourceType, setResourceType] = useState<'condiment' | 'ambalaj'>('condiment');
 
   // Stock Adjustment states
   const [adjustQty, setAdjustQty] = useState(0);
@@ -51,15 +57,16 @@ export default function SpicesManager({
   // Filter condiments
   const condiments = useMemo(() => {
     return resources.filter(
-      (r) => r.bundle === 'condiment' && r.label.toLowerCase().includes(searchTerm.toLowerCase())
+      (r) => (r.bundle === 'condiment' || r.bundle === 'ambalaj') && r.label.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [resources, searchTerm]);
 
   const openCreate = () => {
     setName('');
-    setUnit('kg');
+    setUnit('g');
     setPrice(0);
     setInitialStock(0);
+    setResourceType('condiment');
     setIsCreateOpen(true);
   };
 
@@ -83,6 +90,7 @@ export default function SpicesManager({
     e.preventDefault();
     if (!name.trim()) return;
     onAddResource({
+      bundle: resourceType,
       label: name,
       unit: unit,
       currentPrice: Number(price),
@@ -141,19 +149,20 @@ export default function SpicesManager({
             <Search className="h-4 w-4 text-stone-500 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Caută condiment..."
+              placeholder="Caută produs..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="bg-stone-950 text-stone-200 pl-9 pr-4 py-2 rounded-lg text-xs font-mono border border-amber-900/20 focus:outline-none focus:border-amber-500 w-44 sm:w-64"
             />
           </div>
+          <button type="button" onClick={() => setIsBulkOpen(true)} className="flex items-center space-x-1 rounded-lg border border-amber-700 px-3 py-2 text-xs font-semibold text-amber-500 transition-all hover:bg-amber-950/30"><FileInput className="h-4 w-4" /><span>Import multiplu</span></button>
           <button
             id="btn-create-spice"
             onClick={openCreate}
             className="flex items-center space-x-1 bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold px-3 py-2 rounded-lg text-xs transition-all shadow-md"
           >
             <Plus className="h-4 w-4" />
-            <span>Adăugă Condiment</span>
+            <span>Adaugă produs</span>
           </button>
         </div>
       </div>
@@ -164,7 +173,7 @@ export default function SpicesManager({
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-stone-800 text-stone-400 font-mono uppercase tracking-wider text-[10px]">
-                <th className="py-4 px-6">Nume Condiment</th>
+                <th className="py-4 px-6">Condiment / Ambalaj</th>
                 <th className="py-4 px-6 text-right">Cantitate (Stoc)</th>
                 <th className="py-4 px-6 text-right">Preț Unitar</th>
                 <th className="py-4 px-6 text-right">Valoare Totală</th>
@@ -186,7 +195,7 @@ export default function SpicesManager({
                       <td className="py-3.5 px-6">
                         <div className="flex items-center space-x-2">
                           <span className="w-2 h-2 rounded-full bg-amber-500" />
-                          <span className="font-semibold text-stone-200 text-sm">{res.label}</span>
+                          <span className="font-semibold text-stone-200 text-sm">{res.label}</span><span className="rounded bg-stone-800 px-2 py-0.5 text-[10px] uppercase text-stone-400">{res.bundle === 'ambalaj' ? 'Ambalaj' : 'Condiment'}</span>
                         </div>
                       </td>
                       <td className="py-3.5 px-6 text-right font-mono text-stone-100 font-bold">
@@ -270,6 +279,7 @@ export default function SpicesManager({
               <span>Creează Condiment / Ambalaj</span>
             </h3>
             <form onSubmit={handleCreateSubmit} className="space-y-4">
+              <div className="space-y-1"><label className="text-xs text-stone-400 block font-mono">Tip produs</label><select value={resourceType} onChange={(e) => setResourceType(e.target.value as 'condiment' | 'ambalaj')} className="bg-stone-950 text-stone-200 px-3 py-2 rounded-lg text-xs border border-amber-900/20 w-full"><option value="condiment">Condiment</option><option value="ambalaj">Ambalaj</option></select></div>
               <div className="space-y-1">
                 <label className="text-xs text-stone-400 block font-mono">Nume Condiment / Ambalaj</label>
                 <input
@@ -296,6 +306,10 @@ export default function SpicesManager({
                     <option value="ml">Mililitru (ml)</option>
                     <option value="buc">Bucată (buc)</option>
                     <option value="m">Metru (m)</option>
+                    <option value="sac">Sac</option>
+                    <option value="cutie">Cutie</option>
+                    <option value="pachet">Pachet</option>
+                    <option value="rola">Rolă</option>
                   </select>
                 </div>
 
@@ -347,6 +361,8 @@ export default function SpicesManager({
         </div>
       )}
 
+      {isBulkOpen && <BulkStockImportModal resources={resources} onImport={onBulkImport} onClose={() => setIsBulkOpen(false)} />}
+
       {/* Modal: Editare Condiment */}
       {isEditOpen && selectedResource && (
         <div className="fixed inset-0 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -381,6 +397,10 @@ export default function SpicesManager({
                     <option value="ml">Mililitru (ml)</option>
                     <option value="buc">Bucată (buc)</option>
                     <option value="m">Metru (m)</option>
+                    <option value="sac">Sac</option>
+                    <option value="cutie">Cutie</option>
+                    <option value="pachet">Pachet</option>
+                    <option value="rola">Rolă</option>
                   </select>
                 </div>
 

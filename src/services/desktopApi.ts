@@ -21,6 +21,11 @@ import {
   RecipeLine,
   Resource,
   StockMovement,
+  SubrecipeStock,
+  SubrecipeProduction,
+  ProductSale,
+  ProductSalePreview,
+  BulkStockImport,
 } from "../types";
 import { absoluteRequest, apiRequest, tokenStorage } from "./apiClient";
 
@@ -54,6 +59,7 @@ interface ApiProduct {
   title: string;
   field_stoc: number;
   field_reteta: number | null;
+  field_pret?: number;
 }
 
 interface ApiRecipe {
@@ -62,6 +68,7 @@ interface ApiRecipe {
   field_ingrediente: string | null;
   field_categorie?: number | null;
   field_unitate_baza?: string | null;
+  field_produs_asociat?: number | null;
 }
 
 interface StoredRecipeData {
@@ -95,6 +102,7 @@ const mapRecipe = (recipe: ApiRecipe): Recipe => {
       stored.baseUnit || (recipe.field_unitate_baza === "buc" ? "buc" : "kg"),
     defaultMarkup: stored.defaultMarkup ?? 0,
     lines: Array.isArray(stored.lines) ? stored.lines : [],
+    productId: recipe.field_produs_asociat ? String(recipe.field_produs_asociat) : undefined,
   };
 };
 
@@ -105,6 +113,9 @@ const recipePayload = (recipe: Omit<Recipe, "id"> | Partial<Recipe>) => ({
     : {}),
   ...(recipe.baseUnit !== undefined
     ? { field_unitate_baza: recipe.baseUnit }
+    : {}),
+  ...(recipe.productId !== undefined
+    ? { field_produs_asociat: Number(recipe.productId) || null }
     : {}),
   field_ingrediente: JSON.stringify({
     categoryId: recipe.categoryId,
@@ -175,6 +186,7 @@ export const catalogApi = {
       label: row.title,
       recipeId: String(row.field_reteta || ""),
       stock: Number(row.field_stoc || 0),
+      suggestedPrice: Number(row.field_pret || 0),
     }));
   },
   async createProduct(
@@ -275,6 +287,11 @@ export const boardApi = {
           resourceId: String(result.movement.resourceId),
         },
       })),
+  bulkReceiveResources: (data: BulkStockImport) =>
+    apiRequest<ApiEnvelope<{ items: Array<{ resource: Resource; movement: StockMovement; lotId: number; totalCost: number }>; totalCost: number }>>("/board/resources/bulk-receive", {
+      method: "POST",
+      body: JSON.stringify({ ...data, items: data.items.map((item) => ({ ...item, resourceId: Number(item.resourceId) })) }),
+    }).then(unwrap).then((result) => ({ ...result, items: result.items.map((item) => ({ ...item, resource: { ...item.resource, id: String(item.resource.id) }, movement: { ...item.movement, id: String(item.movement.id), resourceId: String(item.movement.resourceId) } })) })),
   movements: () =>
     apiRequest<ApiEnvelope<StockMovement[]>>("/board/stock-movements")
       .then(unwrap)
@@ -285,6 +302,19 @@ export const boardApi = {
           resourceId: String(row.resourceId),
         })),
       ),
+  subrecipeStocks: () =>
+    apiRequest<ApiEnvelope<SubrecipeStock[]>>("/board/subrecipes/stock")
+      .then(unwrap)
+      .then((rows) => rows.map((row) => ({ ...row, recipeId: String(row.recipeId), resourceId: String(row.resourceId) }))),
+  produceSubrecipe: (recipeId: string, quantity: number, date: string) =>
+    apiRequest<ApiEnvelope<SubrecipeProduction>>(`/board/subrecipes/${recipeId}/produce`, {
+      method: "POST",
+      body: JSON.stringify({ quantity, date }),
+    }).then(unwrap),
+  productSales: () => apiRequest<ApiEnvelope<ProductSale[]>>("/board/product-sales").then(unwrap).then((rows)=>rows.map((row)=>({...row,id:String(row.id),productId:String(row.productId),originalSaleId:row.originalSaleId==null?null:String(row.originalSaleId)}))),
+  productSalePreview: (productId: string, quantity: number) => apiRequest<ApiEnvelope<ProductSalePreview>>(`/board/product-sales?productId=${productId}&quantity=${quantity}`).then(unwrap),
+  createProductSale: (data: {productId:string;date:string;quantity:number;unitPrice:number;note?:string}) => apiRequest<ApiEnvelope<ProductSale>>("/board/product-sales",{method:"POST",body:JSON.stringify({...data,productId:Number(data.productId)})}).then(unwrap),
+  returnProductSale: (saleId: string, data: {date:string;quantity:number;damaged:boolean;note?:string}) => apiRequest<ApiEnvelope<ProductSale>>(`/board/product-sales/${saleId}/return`,{method:"POST",body:JSON.stringify(data)}).then(unwrap),
   employees: () =>
     apiRequest<ApiEnvelope<Employee[]>>("/board/employees")
       .then(unwrap)
@@ -374,16 +404,19 @@ const mapPayment = (row: Payment): Payment => ({
   id: String(row.id),
   partyId: String(row.partyId),
   jobId: stringId(row.jobId),
+  reversalOf: stringId(row.reversalOf),
 });
 const mapInput = (row: JobInput): JobInput => ({
   ...row,
   id: String(row.id),
   resourceId: stringId(row.resourceId),
   suppliedByPartyId: stringId(row.suppliedByPartyId),
+  stockMovementId: stringId(row.stockMovementId),
 });
 const mapCharge = (row: JobCharge): JobCharge => ({
   ...row,
   id: String(row.id),
+  jobId: row.jobId == null ? undefined : String(row.jobId),
 });
 const emptyTotals: JobTotals = {
   producerMaterialCost: 0,
@@ -471,6 +504,7 @@ export const partyApi = {
         party: mapParty(row.party),
         jobs: (row.jobs || []).map(mapJob),
         payments: (row.payments || []).map(mapPayment),
+        totals: row.totals || { netReceivable: 0, paid: 0, balance: 0 },
       })),
 };
 
@@ -510,6 +544,10 @@ export const productionJobApi = {
       .then(mapJob),
   delete: (id: string) =>
     apiRequest(`/board/production-jobs/${id}`, { method: "DELETE" }),
+  start: (id: string) =>
+    apiRequest<ApiEnvelope<ProductionJob>>(`/board/production-jobs/${id}/start`, { method: "POST" })
+      .then(unwrap)
+      .then(mapJob),
   finalize: (id: string, outputQty: number) =>
     apiRequest<ApiEnvelope<ProductionJob>>(
       `/board/production-jobs/${id}/finalize`,
@@ -521,31 +559,30 @@ export const productionJobApi = {
     apiRequest<ApiEnvelope<JobCharge[]>>(`/board/production-jobs/${id}/charges`)
       .then(unwrap)
       .then((rows) => rows.map(mapCharge)),
-  addCharge: (id: string, charge: JobChargeInput) =>
-    apiRequest<ApiEnvelope<ProductionJob>>(
+  addCharge: async (id: string, charge: JobChargeInput) => {
+    await apiRequest<ApiEnvelope<JobCharge>>(
       `/board/production-jobs/${id}/charges`,
       { method: "POST", body: JSON.stringify(charge) },
-    )
-      .then(unwrap)
-      .then(mapJob),
-  updateCharge: (
+    );
+    return productionJobApi.get(id);
+  },
+  updateCharge: async (
     jobId: string,
     chargeId: string,
     charge: Partial<JobChargeInput>,
-  ) =>
-    apiRequest<ApiEnvelope<ProductionJob>>(
+  ) => {
+    await apiRequest<ApiEnvelope<JobCharge>>(
       `/board/production-jobs/${jobId}/charges/${chargeId}`,
       { method: "PATCH", body: JSON.stringify(charge) },
-    )
-      .then(unwrap)
-      .then(mapJob),
-  deleteCharge: (jobId: string, chargeId: string) =>
-    apiRequest<ApiEnvelope<ProductionJob>>(
-      `/board/production-jobs/${jobId}/charges/${chargeId}`,
-      { method: "DELETE" },
-    )
-      .then(unwrap)
-      .then(mapJob),
+    );
+    return productionJobApi.get(jobId);
+  },
+  deleteCharge: async (jobId: string, chargeId: string) => {
+    await apiRequest(`/board/production-jobs/${jobId}/charges/${chargeId}`, {
+      method: "DELETE",
+    });
+    return productionJobApi.get(jobId);
+  },
 };
 
 export const paymentApi = {
@@ -576,11 +613,18 @@ export const paymentApi = {
     apiRequest<ApiEnvelope<Payment>>(`/board/payments/${id}`)
       .then(unwrap)
       .then(mapPayment),
-  void: (id: string, reason: string) =>
-    apiRequest<ApiEnvelope<Payment>>(`/board/payments/${id}/void`, {
-      method: "POST",
-      body: JSON.stringify({ reason }),
-    })
+  void: (
+    id: string,
+    reason: string,
+    date = new Date().toISOString().slice(0, 10),
+  ) =>
+    apiRequest<ApiEnvelope<{ payment: Payment; reversal: Payment }>>(
+      `/board/payments/${id}/void`,
+      { method: "POST", body: JSON.stringify({ reason, date }) },
+    )
       .then(unwrap)
-      .then(mapPayment),
+      .then((row) => ({
+        payment: mapPayment(row.payment),
+        reversal: mapPayment(row.reversal),
+      })),
 };

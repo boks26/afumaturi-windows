@@ -10,16 +10,17 @@ import {
   Trash, 
   Folder, 
   Scale, 
-  ChevronDown 
+  ChevronDown,
+  FlaskConical,
+  PackageCheck,
 } from 'lucide-react';
-import { Recipe, RecipeLine, Resource, Employee, Category, RecipeLineType } from '../types';
+import { Recipe, RecipeLine, Resource, Employee, RecipeLineType } from '../types';
 import { calculateRecipeCost, wouldIntroduceCycle } from '../utils/calculations';
 
 interface RecipesManagerProps {
   recipes: Recipe[];
   resources: Resource[];
   employees: Employee[];
-  categories: Category[];
   onAddRecipe: (recipe: Omit<Recipe, 'id'>) => void;
   onEditRecipe: (id: string, recipe: Partial<Recipe>) => void;
   onDeleteRecipe: (id: string) => void;
@@ -29,7 +30,6 @@ export default function RecipesManager({
   recipes,
   resources,
   employees,
-  categories,
   onAddRecipe,
   onEditRecipe,
   onDeleteRecipe,
@@ -37,18 +37,21 @@ export default function RecipesManager({
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
+  const [recipeFilter, setRecipeFilter] = useState<'all' | 'recipes' | 'subrecipes'>('all');
 
   // Form states
   const [label, setLabel] = useState('');
-  const [categoryId, setCategoryId] = useState('');
   const [isSubRecipe, setIsSubRecipe] = useState(false);
   const [baseUnit, setBaseUnit] = useState<'kg' | 'buc'>('kg');
   const [defaultMarkup, setDefaultMarkup] = useState(70);
   const [formLines, setFormLines] = useState<Omit<RecipeLine, 'id'>[]>([]);
 
   const filteredRecipes = useMemo(() => {
-    return recipes.filter((r) => r.label.toLowerCase().includes(searchTerm.toLowerCase()));
-  }, [recipes, searchTerm]);
+    return recipes.filter((r) =>
+      r.label.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      (recipeFilter === 'all' || (recipeFilter === 'subrecipes' ? r.isSubRecipe : !r.isSubRecipe))
+    );
+  }, [recipes, searchTerm, recipeFilter]);
 
   // Available resources divided by type
   const rawMaterials = useMemo(() => resources.filter((r) => r.bundle === 'materie_prima'), [resources]);
@@ -68,19 +71,14 @@ export default function RecipesManager({
   }, [formLines]);
 
   const isRawMaterialSumValid = useMemo(() => {
-    // If it's a sub-recipe of spices or if base unit is 'buc', maybe sum of meat is different.
-    // But as per spec: "suma cantitatilor din materie prima sa fie egala cu 1 KG"
-    // We validate if it is a main recipe, or if we have at least one raw material. Let's make it strict for 'kg' based recipes.
-    if (baseUnit === 'buc') return true;
-    if (formLines.filter((l) => l.type === 'materie_prima').length === 0) return true; // if no meat added yet
-    return Math.abs(rawMaterialsSum - 1.0) < 0.001;
-  }, [rawMaterialsSum, baseUnit, formLines]);
+    if (isSubRecipe || baseUnit === 'buc') return true;
+    return rawMaterialsSum >= 0.999;
+  }, [rawMaterialsSum, baseUnit, isSubRecipe]);
 
   const openCreate = () => {
     setEditingRecipeId(null);
     setLabel('');
-    setCategoryId(categories[0]?.id || '');
-    setIsSubRecipe(false);
+    setIsSubRecipe(recipeFilter === 'subrecipes');
     setBaseUnit('kg');
     setDefaultMarkup(70);
     setFormLines([
@@ -92,7 +90,6 @@ export default function RecipesManager({
   const openEdit = (recipe: Recipe) => {
     setEditingRecipeId(recipe.id);
     setLabel(recipe.label);
-    setCategoryId(recipe.categoryId);
     setIsSubRecipe(recipe.isSubRecipe);
     setBaseUnit(recipe.baseUnit);
     setDefaultMarkup(recipe.defaultMarkup);
@@ -122,7 +119,7 @@ export default function RecipesManager({
         resourceId: type !== 'subreteta' && type !== 'manopera' ? defaultId : undefined,
         subRecipeId: type === 'subreteta' ? defaultId : undefined,
         employeeId: type === 'manopera' ? defaultId : undefined,
-        quantity: type === 'materie_prima' ? 0.0 : 0.01,
+        quantity: type === 'materie_prima' ? 0.0 : type === 'condiment' ? 1.0 : 0.01,
       },
     ]);
   };
@@ -149,8 +146,8 @@ export default function RecipesManager({
     if (!label.trim()) return;
 
     // Check raw material sum validation
-    if (baseUnit === 'kg' && formLines.some(l => l.type === 'materie_prima') && !isRawMaterialSumValid) {
-      alert(`Atenție! Suma materiilor prime este de ${rawMaterialsSum.toFixed(3)} kg. Trebuie să fie exact 1.00 kg pentru calcularea corectă la kilogram a semifabricatului!`);
+    if (!isRawMaterialSumValid) {
+      alert(`Atenție! Rețeta finală conține ${rawMaterialsSum.toFixed(3)} kg de carne. Este necesar cel puțin 1.00 kg pentru calculele raportate la materia primă.`);
       return;
     }
 
@@ -168,10 +165,9 @@ export default function RecipesManager({
 
     const recipeData = {
       label,
-      categoryId,
       isSubRecipe,
       baseUnit,
-      defaultMarkup: Number(defaultMarkup),
+      defaultMarkup: Math.max(70, Number(defaultMarkup)),
       lines: formLines.map((l, idx) => ({
         ...l,
         id: `l_${Date.now()}_${idx}`,
@@ -194,7 +190,7 @@ export default function RecipesManager({
   };
 
   return (
-    <div id="recipes-manager-container" className="space-y-6 animate-fadeIn">
+    <div id="recipes-manager-container" className="recipe-accessible space-y-6 animate-fadeIn">
       {/* Header section */}
       {!isFormOpen && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-stone-900/40 p-4 rounded-xl border border-amber-900/10 gap-4">
@@ -203,29 +199,45 @@ export default function RecipesManager({
               <ScrollText className="h-5 w-5 text-amber-500" />
               <span>Gestiune Rețete &amp; Sub-Rețete</span>
             </h2>
-            <p className="text-xs text-stone-400">Gestiune rețete de producție, saramuri și marinade de injectare cu calcul de cost integrat recursiv.</p>
+            <p className="mt-1 text-sm text-stone-400">Alegeți rețetele produselor sau subrețetele pentru marinade și saramuri.</p>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="h-4 w-4 text-stone-500 absolute left-3 top-2.5" />
+              <Search className="h-5 w-5 text-stone-500 absolute left-3 top-3" />
               <input
                 type="text"
                 placeholder="Caută rețetă..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-stone-950 text-stone-200 pl-9 pr-4 py-2 rounded-lg text-xs font-mono border border-amber-900/20 focus:outline-none focus:border-amber-500 w-44 sm:w-64"
+              className="h-11 bg-stone-950 text-stone-200 pl-10 pr-4 rounded-lg text-sm border border-amber-900/20 focus:outline-none focus:border-amber-500 w-52 sm:w-72"
               />
             </div>
             <button
               id="btn-create-recipe-open"
               onClick={openCreate}
-              className="flex items-center space-x-1 bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold px-3 py-2 rounded-lg text-xs transition-all shadow-md"
+              className="flex h-11 items-center space-x-2 bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold px-4 rounded-lg text-sm transition-all shadow-md"
             >
               <Plus className="h-4 w-4" />
               <span>Creează Rețetă</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {!isFormOpen && (
+        <div className="grid gap-3 rounded-xl border border-stone-800 bg-stone-900 p-3 sm:grid-cols-3" role="group" aria-label="Filtrează tipul rețetei">
+          {[
+            { id: 'all', label: 'Toate', help: `${recipes.length} înregistrări`, icon: ScrollText },
+            { id: 'recipes', label: 'Rețete pentru produse', help: `${recipes.filter((item) => !item.isSubRecipe).length} rețete`, icon: PackageCheck },
+            { id: 'subrecipes', label: 'Subrețete și marinade', help: `${recipes.filter((item) => item.isSubRecipe).length} subrețete`, icon: FlaskConical },
+          ].map(({ id, label: filterLabel, help, icon: Icon }) => {
+            const selected = recipeFilter === id;
+            return <button key={id} type="button" onClick={() => setRecipeFilter(id as typeof recipeFilter)} aria-pressed={selected} className={`flex min-h-16 items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all ${selected ? 'border-amber-600 bg-amber-950/50 ring-2 ring-amber-500/20' : 'border-stone-800 bg-stone-950/40 hover:border-stone-600'}`}>
+              <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${selected ? 'bg-amber-600 text-stone-950' : 'bg-stone-800 text-stone-400'}`}><Icon className="h-5 w-5" /></span>
+              <span><strong className={`block text-sm ${selected ? 'text-amber-500' : 'text-stone-200'}`}>{filterLabel}</strong><small className="mt-0.5 block text-xs text-stone-500">{help}</small></span>
+            </button>;
+          })}
         </div>
       )}
 
@@ -238,7 +250,6 @@ export default function RecipesManager({
             </div>
           ) : (
             filteredRecipes.map((recipe) => {
-              const category = categories.find((c) => c.id === recipe.categoryId);
               
               // Recursive cost calculation!
               const cost = calculateRecipeCost(recipe.id, recipes, resources, employees);
@@ -256,23 +267,23 @@ export default function RecipesManager({
                       <div>
                         <div className="flex items-center space-x-2">
                           <span className={`w-2 h-2 rounded-full ${recipe.isSubRecipe ? 'bg-amber-500' : 'bg-red-600'}`} />
-                          <h4 className="font-bold text-stone-200 text-base">{recipe.label}</h4>
+                          <h4 className="font-bold text-stone-200 text-lg leading-snug">{recipe.label}</h4>
                         </div>
-                        <span className="text-[10px] text-stone-500 font-mono">
-                          Categorie: {category?.name || 'Fără'} • Bază: 1 {recipe.baseUnit}
+                        <span className="mt-1 block text-sm text-stone-500">
+                          Calcul pentru: <b className="text-stone-400">1 {recipe.baseUnit}</b>
                         </span>
                       </div>
-                      <span className={`px-2 py-0.5 text-[9px] uppercase tracking-wider font-mono rounded-full ${
+                      <span className={`shrink-0 px-3 py-1.5 text-xs font-bold rounded-lg ${
                         recipe.isSubRecipe 
                           ? 'bg-amber-950/60 text-amber-500 border border-amber-500/10' 
                           : 'bg-red-950/60 text-red-400 border border-red-500/10'
                       }`}>
-                        {recipe.isSubRecipe ? 'Sub-Rețetă' : 'Rețetă Produs'}
+                        {recipe.isSubRecipe ? 'Subrețetă / marinadă' : 'Rețetă produs final'}
                       </span>
                     </div>
 
                     {/* Ingredients Summary */}
-                    <div className="space-y-1.5 mb-6 text-xs text-stone-400 font-sans max-h-24 overflow-y-auto pr-1">
+                    <div className="space-y-1.5 mb-6 text-sm text-stone-400 font-sans max-h-40 overflow-y-auto pr-1">
                       {recipe.lines.map((line, idx) => {
                         let itemLabel = '';
                         if (line.type === 'materie_prima' || line.type === 'condiment' || line.type === 'alta_cheltuiala') {
@@ -285,9 +296,9 @@ export default function RecipesManager({
                         const unitLabel = (line.type === 'subreteta') ? 'kg saramură' : (line.type === 'manopera' ? 'efort' : resources.find((r) => r.id === line.resourceId)?.unit || '');
 
                         return (
-                          <div key={idx} className="flex justify-between items-center text-[11px] font-mono border-b border-stone-800/20 py-0.5">
-                            <span className="truncate max-w-[180px]">{itemLabel}</span>
-                            <span className="text-stone-300">{line.quantity.toFixed(3)} {unitLabel}</span>
+                          <div key={idx} className="flex justify-between items-center gap-3 border-b border-stone-800/40 py-2">
+                            <span className="min-w-0 truncate font-medium">{itemLabel}</span>
+                            <span className="shrink-0 font-mono font-bold text-stone-300">{line.quantity.toFixed(3)} {unitLabel}</span>
                           </div>
                         );
                       })}
@@ -298,18 +309,18 @@ export default function RecipesManager({
                   <div className="pt-3 border-t border-stone-800 flex items-center justify-between">
                     <div className="flex gap-4">
                       <div>
-                        <p className="text-[10px] text-stone-500 font-mono uppercase">Cost Producție</p>
-                        <p className="font-mono text-sm font-bold text-stone-200">{cost.toFixed(2)} Lei</p>
+                        <p className="text-xs font-semibold text-stone-500">Cost pentru 1 {recipe.baseUnit}</p>
+                        <p className="font-mono text-base font-bold text-stone-200">{cost.toFixed(2)} Lei</p>
                       </div>
                       {!recipe.isSubRecipe && (
                         <>
                           <div>
-                            <p className="text-[10px] text-stone-500 font-mono uppercase">Vânzare sugerat</p>
-                            <p className="font-mono text-sm font-bold text-amber-500">{retailPrice.toFixed(2)} Lei</p>
+                            <p className="text-xs font-semibold text-stone-500">Preț recomandat</p>
+                            <p className="font-mono text-base font-bold text-amber-500">{retailPrice.toFixed(2)} Lei</p>
                           </div>
                           <div>
-                            <p className="text-[10px] text-stone-500 font-mono uppercase">Adaos / Profit</p>
-                            <p className="font-mono text-sm font-bold text-green-400">+{margin.toFixed(2)} Lei</p>
+                            <p className="text-xs font-semibold text-stone-500">Câștig estimat</p>
+                            <p className="font-mono text-base font-bold text-green-400">+{margin.toFixed(2)} Lei</p>
                           </div>
                         </>
                       )}
@@ -319,18 +330,18 @@ export default function RecipesManager({
                       <button
                         id={`btn-edit-recipe-${recipe.id}`}
                         onClick={() => openEdit(recipe)}
-                        className="p-1.5 text-stone-400 hover:text-amber-500 hover:bg-stone-800 rounded transition-all"
+                        className="grid h-10 w-10 place-items-center text-stone-400 hover:text-amber-500 hover:bg-stone-800 rounded-lg transition-all"
                         title="Editează Rețetă"
                       >
-                        <Edit2 className="h-3.5 w-3.5" />
+                        <Edit2 className="h-5 w-5" />
                       </button>
                       <button
                         id={`btn-delete-recipe-${recipe.id}`}
                         onClick={() => handleDeleteRecipe(recipe.id, recipe.label)}
-                        className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-stone-800 rounded transition-all"
+                        className="grid h-10 w-10 place-items-center text-stone-400 hover:text-red-500 hover:bg-stone-800 rounded-lg transition-all"
                         title="Șterge Rețetă"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-5 w-5" />
                       </button>
                     </div>
                   </div>
@@ -359,7 +370,7 @@ export default function RecipesManager({
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Row 1: Basic Recipe fields */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-stone-950/40 p-4 rounded-xl border border-stone-800">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-stone-950/40 p-4 rounded-xl border border-stone-800">
               <div className="space-y-1 md:col-span-2">
                 <label className="text-xs text-stone-400 block font-mono">Denumire Rețetă</label>
                 <input
@@ -370,19 +381,6 @@ export default function RecipesManager({
                   placeholder="Ex: Ciafă afumată premium, Brânză marinată"
                   className="bg-stone-950 text-stone-200 px-3 py-2 rounded-lg text-xs font-sans border border-amber-900/20 focus:outline-none focus:border-amber-500 w-full"
                 />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs text-stone-400 block font-mono">Categorie Produs</label>
-                <select
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                  className="bg-stone-950 text-stone-200 px-3 py-2 rounded-lg text-xs font-sans border border-amber-900/20 focus:outline-none focus:border-amber-500 w-full"
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
               </div>
 
               <div className="space-y-1">
@@ -428,7 +426,7 @@ export default function RecipesManager({
                   <label className="text-xs text-stone-400 block font-mono">Adaos Comercial Adaos %</label>
                   <input
                     type="number"
-                    min="0"
+                    min="70"
                     required
                     value={defaultMarkup || ''}
                     onChange={(e) => setDefaultMarkup(Number(e.target.value))}

@@ -221,7 +221,14 @@ export default function Calculator({
                         <td className="py-2 text-right font-mono text-amber-500 font-bold">{item.total.toFixed(2)} Lei</td>
                       </tr>
                     ))}
-                    {scaledData.condimente.length === 0 && (
+                    {scaledData.subrecipes.map((subrecipe) => (
+                      <tr key={`ingredient-${subrecipe.recipeId}`} className="border-b border-stone-800/30 bg-amber-950/10">
+                        <td className="py-2 font-semibold text-stone-200">{subrecipe.label} <span className="text-[10px] text-amber-500">(subrețetă)</span></td>
+                        <td className="py-2 text-right font-mono text-stone-100 font-bold">{subrecipe.quantity.toFixed(3)} <span className="text-[10px] text-stone-400">{subrecipe.unit}</span></td>
+                        <td className="py-2 text-right font-mono text-stone-400">{subrecipe.unitCost.toFixed(2)} Lei/{subrecipe.unit}</td><td className="py-2 text-right font-mono font-bold text-amber-500">{subrecipe.totalCost.toFixed(2)} Lei</td>
+                      </tr>
+                    ))}
+                    {scaledData.condimente.length === 0 && scaledData.subrecipes.length === 0 && (
                       <tr>
                         <td colSpan={4} className="py-2 text-stone-500 italic text-center">Fără condimente de nivel principal.</td>
                       </tr>
@@ -237,7 +244,7 @@ export default function Calculator({
             </div>
 
             {/* 3. Condimente din Retete / Saramuri */}
-            {scaledData.condimenteRecete.length > 0 && (
+            {scaledData.subrecipes.length > 0 && (
               <div className="bg-stone-900 rounded-xl border border-amber-900/20 p-5 shadow-lg">
                 <h3 className="text-xs font-bold uppercase font-mono tracking-wider text-stone-300 border-b border-stone-800 pb-3 mb-4 flex items-center space-x-2">
                   <Layers className="h-4 w-4 text-amber-500" />
@@ -254,16 +261,17 @@ export default function Calculator({
                       </tr>
                     </thead>
                     <tbody>
-                      {scaledData.condimenteRecete.map((item) => (
-                        <tr key={item.resourceId} className="border-b border-stone-800/30 py-2">
-                          <td className="py-2 font-semibold text-stone-200">{item.label}</td>
-                          <td className="py-2 text-right font-mono text-stone-100 font-bold">
-                            {item.quantity.toFixed(4)} <span className="text-[10px] text-stone-400">{item.unit}</span>
-                          </td>
-                          <td className="py-2 text-right font-mono text-stone-400">{item.priceUnit.toFixed(2)} Lei/{item.unit}</td>
-                          <td className="py-2 text-right font-mono text-amber-500 font-bold">{item.total.toFixed(2)} Lei</td>
-                        </tr>
-                      ))}
+                      {scaledData.subrecipes.flatMap((subrecipe) => [
+                        <tr key={`header-${subrecipe.recipeId}`} className="bg-amber-950/30 text-amber-500"><td colSpan={4} className="px-2 py-2 font-bold">{subrecipe.label} · necesar {subrecipe.quantity.toFixed(3)} {subrecipe.unit}</td></tr>,
+                        ...subrecipe.condimente.map((item) => (
+                          <tr key={`${subrecipe.recipeId}-${item.resourceId}`} className="border-b border-stone-800/30 py-2">
+                            <td className="py-2 pl-3 font-semibold text-stone-200">{item.label}</td>
+                            <td className="py-2 text-right font-mono text-stone-100 font-bold">{item.quantity.toFixed(4)} <span className="text-[10px] text-stone-400">{item.unit}</span></td>
+                            <td className="py-2 text-right font-mono text-stone-400">{item.priceUnit.toFixed(2)} Lei/{item.unit}</td>
+                            <td className="py-2 text-right font-mono text-amber-500 font-bold">{item.total.toFixed(2)} Lei</td>
+                          </tr>
+                        )),
+                      ])}
                       <tr className="font-bold text-stone-100 border-t border-stone-800">
                         <td className="py-2.5">Total Condimente Sub-Rețete</td>
                         <td colSpan={2}></td>

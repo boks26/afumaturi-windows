@@ -107,6 +107,7 @@ export interface ScaledResult {
   condimenteRecete: ScaledItem[];
   alteCheltuieli: ScaledItem[];
   muncaPersonal: ScaledLabor[];
+  subrecipes: Array<{ recipeId: string; label: string; quantity: number; unit: string; unitCost: number; totalCost: number; condimente: ScaledItem[] }>;
   totals: {
     materiePrima: number;
     condimente: number;
@@ -134,6 +135,7 @@ export function scaleRecipeIngredients(
     condimenteRecete: [],
     alteCheltuieli: [],
     muncaPersonal: [],
+    subrecipes: [],
     totals: {
       materiePrima: 0,
       condimente: 0,
@@ -142,6 +144,24 @@ export function scaleRecipeIngredients(
       muncaPersonal: 0,
       grandTotal: 0,
     },
+  };
+
+  const collectSubrecipeCondiments = (recipeId: string, multiplier: number, items: ScaledItem[], visited: Set<string>) => {
+    if (visited.has(recipeId)) return;
+    const recipe = allRecipes.find((r) => r.id === recipeId);
+    if (!recipe) return;
+    const nextVisited = new Set(visited).add(recipeId);
+    for (const line of recipe.lines) {
+      const scaledQty = line.quantity * multiplier;
+      if (line.type === 'condiment' && line.resourceId) {
+        const resource = allResources.find((r) => r.id === line.resourceId);
+        if (!resource) continue;
+        const existing = items.find((item) => item.resourceId === resource.id);
+        if (existing) { existing.quantity += scaledQty; existing.total += resource.currentPrice * scaledQty; }
+        else items.push({ resourceId: resource.id, label: resource.label, quantity: scaledQty, unit: resource.unit, priceUnit: resource.currentPrice, total: resource.currentPrice * scaledQty });
+      }
+      else if (line.type === 'subreteta' && line.subRecipeId) collectSubrecipeCondiments(line.subRecipeId, scaledQty, items, nextVisited);
+    }
   };
 
   const traverse = (currentRecipeId: string, multiplier: number, isSubLevel: boolean) => {
@@ -219,6 +239,11 @@ export function scaleRecipeIngredients(
         }
         case 'subreteta': {
           if (line.subRecipeId) {
+            const subrecipe = allRecipes.find((item) => item.id === line.subRecipeId);
+            const condimente: ScaledItem[] = [];
+            collectSubrecipeCondiments(line.subRecipeId, scaledQty, condimente, new Set());
+            const unitCost = subrecipe ? calculateRecipeCost(subrecipe.id, allRecipes, allResources, allEmployees) : 0;
+            result.subrecipes.push({ recipeId: line.subRecipeId, label: subrecipe?.label || `Subrețeta ${line.subRecipeId}`, quantity: scaledQty, unit: subrecipe?.baseUnit || 'kg', unitCost, totalCost: unitCost * scaledQty, condimente });
             // Recursively traverse the sub-recipe, flag as sub-level to separate spices
             traverse(line.subRecipeId, scaledQty, true);
           }

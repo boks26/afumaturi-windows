@@ -526,6 +526,15 @@ export default function ReportsManager({
       )}
 
       {/* 3. Detail Report Viewer (Vizualizare Dare de Seama) */}
+      {viewingReportId && (!viewedReport || !viewedReportProduct || !viewedReportRecipe || !scaledIngredientsView) && (
+        <div className="rounded-xl border border-amber-500/30 bg-stone-900 p-8 text-center shadow-xl">
+          <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-500" />
+          <h3 className="text-lg font-bold text-stone-100">Detaliile complete nu mai sunt disponibile</h3>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-stone-400">Raportul există, dar produsul sau rețeta asociată a fost modificată ori arhivată. Datele de bază ale raportului rămân păstrate.</p>
+          {viewedReport && <p className="mt-3 font-mono text-xs text-stone-500">{viewedReport.name} • {viewedReport.date}</p>}
+          <button onClick={() => setViewingReportId(null)} className="mt-5 rounded-lg bg-amber-600 px-4 py-2 text-xs font-bold text-stone-950">Înapoi la rapoarte</button>
+        </div>
+      )}
       {viewingReportId && viewedReport && viewedReportProduct && viewedReportRecipe && scaledIngredientsView && (
         <div id="report-view-screen" className="bg-stone-900 rounded-xl border border-amber-900/20 p-6 shadow-xl animate-fadeIn space-y-6">
           {/* Header toolbar */}
@@ -641,7 +650,13 @@ export default function ReportsManager({
                       <td className="py-2 text-right text-stone-200 font-bold">{item.total.toFixed(2)} Lei</td>
                     </tr>
                   ))}
-                  {scaledIngredientsView.condimente.length === 0 && (
+                  {scaledIngredientsView.subrecipes.map((subrecipe) => (
+                    <tr key={`ingredient-${subrecipe.recipeId}`} className="border-b border-stone-900/50 bg-amber-950/10 text-stone-300">
+                      <td className="py-2 text-stone-200 font-sans font-semibold">{subrecipe.label} <span className="text-[9px] text-amber-500">(subrețetă)</span></td>
+                      <td className="py-2 text-right font-bold">{subrecipe.quantity.toFixed(3)} {subrecipe.unit}</td><td className="py-2 text-right">{subrecipe.unitCost.toFixed(2)} Lei/{subrecipe.unit}</td><td className="py-2 text-right font-bold text-amber-500">{subrecipe.totalCost.toFixed(2)} Lei</td>
+                    </tr>
+                  ))}
+                  {scaledIngredientsView.condimente.length === 0 && scaledIngredientsView.subrecipes.length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-2 text-center text-stone-600 italic">Niciun condiment pe nivelul principal.</td>
                     </tr>
@@ -656,7 +671,7 @@ export default function ReportsManager({
             </div>
 
             {/* C. Condimente pentru Recete (Subrecipes condiments) */}
-            {scaledIngredientsView.condimenteRecete.length > 0 && (
+            {scaledIngredientsView.subrecipes.length > 0 && (
               <div className="bg-stone-950/20 p-4 rounded-xl border border-stone-800">
                 <h4 className="text-xs font-bold uppercase font-mono text-stone-300 border-b border-stone-800 pb-2 mb-3 flex items-center space-x-2">
                   <FileText className="h-3.5 w-3.5 text-amber-500" />
@@ -672,14 +687,10 @@ export default function ReportsManager({
                     </tr>
                   </thead>
                   <tbody>
-                    {scaledIngredientsView.condimenteRecete.map((item) => (
-                      <tr key={item.resourceId} className="border-b border-stone-900/50 text-stone-300">
-                        <td className="py-2 text-stone-200 font-sans font-semibold">{item.label}</td>
-                        <td className="py-2 text-right font-bold">{item.quantity.toFixed(4)} {item.unit}</td>
-                        <td className="py-2 text-right">{item.priceUnit.toFixed(2)} Lei/{item.unit}</td>
-                        <td className="py-2 text-right text-stone-200 font-bold">{item.total.toFixed(2)} Lei</td>
-                      </tr>
-                    ))}
+                    {scaledIngredientsView.subrecipes.flatMap((subrecipe) => [
+                      <tr key={`header-${subrecipe.recipeId}`} className="bg-amber-950/30 text-amber-500"><td colSpan={4} className="px-2 py-2 font-bold">{subrecipe.label} · necesar {subrecipe.quantity.toFixed(3)} {subrecipe.unit}</td></tr>,
+                      ...subrecipe.condimente.map((item) => <tr key={`${subrecipe.recipeId}-${item.resourceId}`} className="border-b border-stone-900/50 text-stone-300"><td className="py-2 pl-3 text-stone-200 font-sans font-semibold">{item.label}</td><td className="py-2 text-right font-bold">{item.quantity.toFixed(4)} {item.unit}</td><td className="py-2 text-right">{item.priceUnit.toFixed(2)} Lei/{item.unit}</td><td className="py-2 text-right text-stone-200 font-bold">{item.total.toFixed(2)} Lei</td></tr>),
+                    ])}
                     <tr className="font-bold border-t border-stone-800 text-stone-200">
                       <td className="py-2 font-sans">Subtotal Condimente Sub-Rețete</td>
                       <td colSpan={2}></td>

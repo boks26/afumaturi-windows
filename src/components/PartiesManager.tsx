@@ -78,6 +78,8 @@ export default function PartiesManager({
         ? await partyApi.update(editing.id, form)
         : await partyApi.create(form);
       setShowForm(false);
+      setEditing(null);
+      setForm({ name: "", roles: ["customer"], phone: "", email: "", notes: "", active: true });
       await onChanged();
     } catch (e) {
       onError(
@@ -113,6 +115,7 @@ export default function PartiesManager({
         note: payment.note,
       });
       setStatement(await partyApi.statement(selected.id));
+      setPayment({ amount: 0, date: new Date().toISOString().slice(0, 10), method: "cash", note: "" });
       await onChanged();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Plata nu a putut fi salvată.");
@@ -284,7 +287,7 @@ export default function PartiesManager({
               className="w-full rounded bg-stone-950 p-3"
             />
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowForm(false)}>
+              <button type="button" onClick={() => { setShowForm(false); setEditing(null); setForm({ name: "", roles: ["customer"], phone: "", email: "", notes: "", active: true }); }}>
                 Renunță
               </button>
               <button
@@ -298,8 +301,8 @@ export default function PartiesManager({
         </div>
       )}
       {selected && (
-        <div className="fixed inset-0 z-50 overflow-auto bg-black/70 p-6">
-          <div className="mx-auto max-w-4xl space-y-5 rounded-xl bg-stone-900 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-4xl space-y-5 rounded-xl bg-stone-900 p-6">
             <div className="flex justify-between">
               <h3 className="text-xl font-bold">Fișa: {selected.name}</h3>
               <button
@@ -315,9 +318,9 @@ export default function PartiesManager({
               <>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {[
-                    ["Total datorat", statement.totalReceivable],
-                    ["Achitat", statement.totalPaid],
-                    ["Sold", statement.balance],
+                    ["Total datorat", statement.totals.netReceivable],
+                    ["Achitat", statement.totals.paid],
+                    ["Sold", statement.totals.balance],
                   ].map(([l, v]) => (
                     <div key={String(l)} className="rounded bg-stone-950 p-4">
                       <p className="text-xs text-stone-500">{l}</p>

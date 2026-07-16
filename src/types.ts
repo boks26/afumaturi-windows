@@ -1,4 +1,4 @@
-export type ResourceBundle = "materie_prima" | "condiment" | "alta_cheltuiala";
+export type ResourceBundle = "materie_prima" | "condiment" | "ambalaj" | "alta_cheltuiala" | "semifabricat";
 
 export interface Resource {
   id: string;
@@ -18,6 +18,19 @@ export interface StockMovement {
   priceUnit?: number; // only for 'intrare'
   date: string;
   source?: string; // description or link to DareDeSeama ID
+}
+
+export interface BulkStockItem { resourceId: string; quantity: number; totalPrice: number; }
+export interface BulkStockImport { date: string; source: string; items: BulkStockItem[]; }
+
+export interface SubrecipeStock {
+  recipeId: string; recipeLabel: string; resourceId: string; unit: string;
+  stock: number; currentPrice: number;
+}
+
+export interface SubrecipeProduction {
+  id: string; recipeId: string; recipeLabel: string; quantity: number;
+  unit: string; totalCost: number; unitCost: number; stock: number;
 }
 
 export interface Employee {
@@ -45,11 +58,12 @@ export interface RecipeLine {
 export interface Recipe {
   id: string;
   label: string;
-  categoryId: string; // reference to category
+  categoryId?: string; // legacy catalog classification; not used by recipe calculations
   isSubRecipe: boolean; // e.g., marinade or brine is subrecipe
   baseUnit: "kg" | "buc";
   defaultMarkup: number; // percentage, e.g., 70 for 70%
   lines: RecipeLine[];
+  productId?: string; // optional reverse association; multiple recipes may target one product
 }
 
 export interface FinalProduct {
@@ -58,7 +72,11 @@ export interface FinalProduct {
   recipeId: string;
   stock: number;
   lastProductionDate?: string;
+  suggestedPrice?: number;
 }
+
+export interface ProductSale { id: string; productId: string; productLabel: string; date: string; quantity: number; unitPrice: number; revenue: number; fifoCost: number; profit: number; entryType?: "sale" | "return"; originalSaleId?: string | null; returnKind?: "restock" | "damaged" | null; returnedQuantity?: number; allocations: Array<{ quantity: number; unitCost: number; totalCost: number; date?: string | null; source?: string; provisional?: boolean }>; note?: string; }
+export interface ProductSalePreview { fifoCost: number; averageCost: number; stock: number; stockAfter: number; allocations: ProductSale["allocations"]; }
 
 export interface ProductionReport {
   id: string;
@@ -118,10 +136,12 @@ export interface JobInput {
   totalCost: number;
   ownership: MaterialOwnership;
   suppliedByPartyId?: string | null;
+  stockMovementId?: string | null;
 }
 
 export interface JobCharge {
   id: string;
+  jobId?: string;
   type: ChargeType;
   description: string;
   quantity?: number | null;
@@ -154,6 +174,9 @@ export interface Payment {
   method: "cash" | "bank" | "card" | "other";
   note?: string | null;
   status: "posted" | "voided";
+  reversalOf?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
 }
 
 export interface ProductionJob {
@@ -213,7 +236,5 @@ export interface PartyStatement {
   party: Party;
   jobs: ProductionJob[];
   payments: Payment[];
-  totalReceivable: number;
-  totalPaid: number;
-  balance: number;
+  totals: { netReceivable: number; paid: number; balance: number };
 }
