@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capabilitatile ferestrei principale Afumaturi",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "updater:default"]
 }

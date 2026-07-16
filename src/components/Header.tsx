@@ -19,6 +19,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Handshake } from "lucide-react";
+import UpdateButton from "./UpdateButton";
 
 interface HeaderProps {
   activeTab: string;
@@ -150,6 +151,7 @@ export default function Header({
 
           {/* User Info & Logout (Desktop) */}
           <div className="hidden lg:flex shrink-0 items-center gap-2">
+            <UpdateButton />
             <button onClick={onToggleTheme} className="grid h-9 w-9 place-items-center rounded-lg border border-stone-800 text-stone-400 transition-colors hover:border-amber-700 hover:bg-stone-800 hover:text-amber-500" title={theme === "dark" ? "Activează tema de zi" : "Activează tema de noapte"} aria-label="Schimbă tema">
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
@@ -221,6 +223,7 @@ export default function Header({
             );
           })}
           <div className="border-t border-stone-800 pt-3 mt-3">
+            <UpdateButton mobile />
             <button
               id="logout-button-mobile"
               onClick={() => {
