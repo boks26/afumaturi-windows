@@ -5,6 +5,7 @@ param(
     [string]$PublicBaseUrl = "https://afumaturi-api.duckdns.org/updates",
     [string]$SshKeyPath = "$env:USERPROFILE\.ssh\afumaturi_contabo",
     [string]$SigningKeyPath = "$env:USERPROFILE\.tauri\afumaturi-updater.key",
+    [switch]$NonInteractive,
     [switch]$SkipBuild
 )
 
@@ -46,7 +47,7 @@ foreach ($file in @($SshKeyPath)) {
         throw "Fisierul necesar nu exista: $file"
     }
 }
-if (-not $SkipBuild -and -not (Test-Path $SigningKeyPath -PathType Leaf)) {
+if (-not $SkipBuild -and -not $env:TAURI_SIGNING_PRIVATE_KEY -and -not (Test-Path $SigningKeyPath -PathType Leaf)) {
     throw "Fisierul necesar nu exista: $SigningKeyPath"
 }
 
@@ -84,16 +85,21 @@ if (-not $SkipBuild) {
 }
 
 $passwordPointer = [IntPtr]::Zero
-if (-not $SkipBuild) {
+if (-not $SkipBuild -and -not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
+    if ($NonInteractive) {
+        throw "TAURI_SIGNING_PRIVATE_KEY_PASSWORD lipseste in modul neinteractiv."
+    }
     $securePassword = Read-Host "Parola cheii Tauri updater" -AsSecureString
     $passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+    $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
 }
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) "afumaturi-release-$([Guid]::NewGuid())"
 
 try {
     if (-not $SkipBuild) {
-        $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $SigningKeyPath -Raw
-        $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
+        if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $SigningKeyPath -Raw
+        }
         Invoke-Checked "Instalare exacta dependente" { & npm.cmd ci }
         Invoke-Checked "Build si semnare Windows x64" { & npm.cmd run tauri:build:x64 }
         Invoke-Checked "Build si semnare Windows x32" { & npm.cmd run tauri:build:x86 }
