@@ -65,7 +65,6 @@ if ([string]$tauriConfig.version -ne $version) {
 Write-Host "Release Afumaturi Windows $version" -ForegroundColor Green
 Write-Host "Destinatie: ${SshUser}@${Server}:${RemoteDirectory}"
 
-$llvmBin = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\bin"
 if (-not $SkipBuild) {
     $installedTargets = & rustup.exe target list --installed
     foreach ($target in @(
@@ -78,10 +77,10 @@ if (-not $SkipBuild) {
         }
     }
 
-    if (-not (Test-Path "$llvmBin\clang.exe" -PathType Leaf)) {
-        throw "Clang lipseste din $llvmBin. Instaleaza componenta Visual Studio VC.Llvm.Clang."
+    $clang = Get-Command clang.exe -ErrorAction SilentlyContinue
+    if (-not $clang) {
+        throw "Clang lipseste din PATH. Instaleaza componenta Visual Studio VC.Llvm.Clang."
     }
-    $env:PATH = "$llvmBin;$env:PATH"
 }
 
 $passwordPointer = [IntPtr]::Zero
