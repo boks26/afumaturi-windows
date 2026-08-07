@@ -143,7 +143,7 @@ try {
 
     $destination = "${SshUser}@${Server}:${RemoteDirectory}/"
     Invoke-Checked "Upload artefacte catre Contabo" {
-        & scp.exe -i $SshKeyPath -o IdentitiesOnly=yes -o PasswordAuthentication=no @uploadFiles $destination
+        & scp.exe -i $SshKeyPath -o IdentitiesOnly=yes -o PasswordAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=yes @uploadFiles $destination
     }
 
     $remoteCommands = @(
@@ -155,7 +155,7 @@ try {
     ) -join " && "
 
     Invoke-Checked "Activare release pe Contabo" {
-        & ssh.exe -i $SshKeyPath -o IdentitiesOnly=yes -o PasswordAuthentication=no "${SshUser}@${Server}" $remoteCommands
+        & ssh.exe -i $SshKeyPath -o IdentitiesOnly=yes -o PasswordAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=yes "${SshUser}@${Server}" $remoteCommands
     }
 
     Write-Host "`nRelease $version publicat cu succes." -ForegroundColor Green
