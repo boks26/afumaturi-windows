@@ -54,11 +54,16 @@ jobs:
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
           if (-not $env:DEPLOY_SSH_KEY) { throw "DEPLOY_SSH_KEY is not configured." }
           if (-not $env:DEPLOY_HOST) { throw "DEPLOY_HOST is not configured." }
+          if (-not $env:DEPLOY_KNOWN_HOSTS) { throw "DEPLOY_KNOWN_HOSTS is not configured." }
           $keyPath = Join-Path $env:RUNNER_TEMP "afumaturi_contabo"
           [IO.File]::WriteAllText($keyPath, $env:DEPLOY_SSH_KEY, [Text.UTF8Encoding]::new($false))
+          $sshDirectory = Join-Path $HOME ".ssh"
+          New-Item -ItemType Directory -Path $sshDirectory -Force | Out-Null
+          [IO.File]::WriteAllText((Join-Path $sshDirectory "known_hosts"), $env:DEPLOY_KNOWN_HOSTS, [Text.UTF8Encoding]::new($false))
           "AFUMATURI_DEPLOY_KEY=$keyPath" >> $env:GITHUB_ENV
 
       - name: Build, sign and publish
