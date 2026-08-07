@@ -61,6 +61,9 @@ jobs:
           if (-not $env:DEPLOY_KNOWN_HOSTS) { throw "DEPLOY_KNOWN_HOSTS is not configured." }
           $keyPath = Join-Path $env:RUNNER_TEMP "afumaturi_contabo"
           [IO.File]::WriteAllText($keyPath, $env:DEPLOY_SSH_KEY, [Text.UTF8Encoding]::new($false))
+          & icacls.exe $keyPath /inheritance:r | Out-Null
+          & icacls.exe $keyPath /grant:r "${env:USERNAME}:(R)" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Could not restrict deployment key permissions." }
           $sshDirectory = Join-Path $HOME ".ssh"
           New-Item -ItemType Directory -Path $sshDirectory -Force | Out-Null
           [IO.File]::WriteAllText((Join-Path $sshDirectory "known_hosts"), $env:DEPLOY_KNOWN_HOSTS, [Text.UTF8Encoding]::new($false))
