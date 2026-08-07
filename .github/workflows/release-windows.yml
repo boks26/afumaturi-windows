@@ -1,0 +1,77 @@
+name: Release Windows production
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+concurrency:
+  group: afumaturi-windows-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build, sign and publish Windows
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v4
+
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tauriVersion = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($packageVersion -ne $tauriVersion) {
+            throw "package.json ($packageVersion) and tauri.conf.json ($tauriVersion) differ."
+          }
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$packageVersion") {
+            throw "Tag ${{ github.ref_name }} does not match application version v$packageVersion."
+          }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc,i686-pc-windows-msvc,aarch64-pc-windows-msvc
+
+      - name: Configure deployment key
+        shell: pwsh
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if (-not $env:DEPLOY_SSH_KEY) { throw "DEPLOY_SSH_KEY is not configured." }
+          if (-not $env:DEPLOY_HOST) { throw "DEPLOY_HOST is not configured." }
+          $keyPath = Join-Path $env:RUNNER_TEMP "afumaturi_contabo"
+          [IO.File]::WriteAllText($keyPath, $env:DEPLOY_SSH_KEY, [Text.UTF8Encoding]::new($false))
+          "AFUMATURI_DEPLOY_KEY=$keyPath" >> $env:GITHUB_ENV
+
+      - name: Build, sign and publish
+        shell: pwsh
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw "TAURI_SIGNING_PRIVATE_KEY is not configured." }
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) { throw "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not configured." }
+          if (-not $env:DEPLOY_USER) { throw "DEPLOY_USER is not configured." }
+          ./scripts/release-windows.ps1 `
+            -Server $env:DEPLOY_HOST `
+            -SshUser $env:DEPLOY_USER `
+            -SshKeyPath $env:AFUMATURI_DEPLOY_KEY `
+            -NonInteractive
