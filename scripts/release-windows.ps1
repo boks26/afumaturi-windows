@@ -95,37 +95,73 @@ if (-not $SkipBuild -and -not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
 $temporaryDirectory = Join-Path ([IO.Path]::GetTempPath()) "afumaturi-release-$([Guid]::NewGuid())"
 
 try {
+    $artifacts = [ordered]@{
+        "windows-x86_64" = [ordered]@{
+            Description = "Build si semnare Windows x64"
+            Script = "tauri:build:x64"
+            Installer = "$projectRoot\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\Afumaturi_${version}_x64-setup.exe"
+        }
+        "windows-i686" = [ordered]@{
+            Description = "Build si semnare Windows x32"
+            Script = "tauri:build:x86"
+            Installer = "$projectRoot\src-tauri\target\i686-pc-windows-msvc\release\bundle\nsis\Afumaturi_${version}_x86-setup.exe"
+        }
+        "windows-aarch64" = [ordered]@{
+            Description = "Build si semnare Windows ARM64"
+            Script = "tauri:build:arm64"
+            Installer = "$projectRoot\src-tauri\target\aarch64-pc-windows-msvc\release\bundle\nsis\Afumaturi_${version}_arm64-setup.exe"
+        }
+    }
+    $destination = "${SshUser}@${Server}:${RemoteDirectory}/"
+    $sshOptions = @(
+        "-i", $SshKeyPath,
+        "-o", "IdentitiesOnly=yes",
+        "-o", "PasswordAuthentication=no",
+        "-o", "BatchMode=yes",
+        "-o", "StrictHostKeyChecking=yes",
+        "-o", "ConnectTimeout=15",
+        "-o", "ServerAliveInterval=15",
+        "-o", "ServerAliveCountMax=3"
+    )
+
     if (-not $SkipBuild) {
         if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
             $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $SigningKeyPath -Raw
         }
         Invoke-Checked "Instalare exacta dependente" { & npm.cmd ci }
-        Invoke-Checked "Build si semnare Windows x64" { & npm.cmd run tauri:build:x64 }
-        Invoke-Checked "Build si semnare Windows x32" { & npm.cmd run tauri:build:x86 }
-        Invoke-Checked "Build si semnare Windows ARM64" { & npm.cmd run tauri:build:arm64 }
     }
 
-    $artifacts = [ordered]@{
-        "windows-x86_64" = "$projectRoot\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\Afumaturi_${version}_x64-setup.exe"
-        "windows-i686" = "$projectRoot\src-tauri\target\i686-pc-windows-msvc\release\bundle\nsis\Afumaturi_${version}_x86-setup.exe"
-        "windows-aarch64" = "$projectRoot\src-tauri\target\aarch64-pc-windows-msvc\release\bundle\nsis\Afumaturi_${version}_arm64-setup.exe"
-    }
-
-    $uploadFiles = [System.Collections.Generic.List[string]]::new()
     $platforms = [ordered]@{}
     foreach ($entry in $artifacts.GetEnumerator()) {
-        $installer = $entry.Value
+        $artifactDefinition = $entry.Value
+        if (-not $SkipBuild) {
+            $buildScript = $artifactDefinition.Script
+            Invoke-Checked $artifactDefinition.Description { & npm.cmd run $buildScript }
+        }
+
+        $installer = $artifactDefinition.Installer
         $signature = "$installer.sig"
-        foreach ($artifact in @($installer, $signature)) {
-            if (-not (Test-Path $artifact -PathType Leaf)) {
-                throw "Artefactul lipseste: $artifact"
+        foreach ($artifactPath in @($installer, $signature)) {
+            if (-not (Test-Path $artifactPath -PathType Leaf)) {
+                throw "Artefactul lipseste: $artifactPath"
             }
-            $uploadFiles.Add($artifact)
         }
 
         $platforms[$entry.Key] = [ordered]@{
             signature = (Get-Content $signature -Raw).Trim()
             url = "$PublicBaseUrl/$([IO.Path]::GetFileName($installer))"
+        }
+
+        Invoke-Checked "Upload $($entry.Key) catre Contabo" {
+            foreach ($uploadFile in @($installer, $signature)) {
+                $fileInfo = Get-Item -LiteralPath $uploadFile
+                Write-Host "Upload $($fileInfo.Name) ($([Math]::Round($fileInfo.Length / 1MB, 2)) MB)..."
+                & scp.exe @sshOptions -- $uploadFile $destination
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Upload esuat pentru $($fileInfo.Name) (cod $LASTEXITCODE)."
+                }
+                Write-Host "Upload finalizat: $($fileInfo.Name)" -ForegroundColor Green
+            }
         }
     }
 
@@ -139,11 +175,12 @@ try {
     }
     $manifestJson = $manifest | ConvertTo-Json -Depth 6
     [IO.File]::WriteAllText($manifestPath, $manifestJson, [Text.UTF8Encoding]::new($false))
-    $uploadFiles.Add($manifestPath)
 
-    $destination = "${SshUser}@${Server}:${RemoteDirectory}/"
-    Invoke-Checked "Upload artefacte catre Contabo" {
-        & scp.exe -i $SshKeyPath -o IdentitiesOnly=yes -o PasswordAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=yes @uploadFiles $destination
+    Invoke-Checked "Upload manifest catre Contabo" {
+        & scp.exe @sshOptions -- $manifestPath $destination
+        if ($LASTEXITCODE -ne 0) {
+            throw "Upload esuat pentru manifest (cod $LASTEXITCODE)."
+        }
     }
 
     $remoteCommands = @(
@@ -155,7 +192,7 @@ try {
     ) -join " && "
 
     Invoke-Checked "Activare release pe Contabo" {
-        & ssh.exe -i $SshKeyPath -o IdentitiesOnly=yes -o PasswordAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=yes "${SshUser}@${Server}" $remoteCommands
+        & ssh.exe @sshOptions -- "${SshUser}@${Server}" $remoteCommands
     }
 
     Write-Host "`nRelease $version publicat cu succes." -ForegroundColor Green
