@@ -21,6 +21,7 @@ import {
 import { Handshake } from "lucide-react";
 import UpdateButton from "./UpdateButton";
 import HelpCenter from "./HelpCenter";
+import type { Language } from "../i18n";
 
 interface HeaderProps {
   activeTab: string;
@@ -29,6 +30,8 @@ interface HeaderProps {
   onLogout: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  language: Language;
+  onLanguageChange: (language: Language) => void;
 }
 
 export default function Header({
@@ -38,6 +41,8 @@ export default function Header({
   onLogout,
   theme,
   onToggleTheme,
+  language,
+  onLanguageChange,
 }: HeaderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
@@ -65,7 +70,7 @@ export default function Header({
     { id: "retete", label: "Rețete", icon: ScrollText },
     { id: "loturi_productie", label: "Loturi", icon: FileSpreadsheet },
     { id: "parteneri", label: "Parteneri", icon: Handshake },
-    { id: "dari_de_seama", label: "Vânzări produse", icon: FileSpreadsheet },
+    { id: "dari_de_seama", label: "Vânzări Produse", icon: FileSpreadsheet },
     { id: "materia_prima", label: "Materia Primă", icon: Beef },
     { id: "condimente", label: "Condimente", icon: Sprout },
     { id: "alte_cheltuieli", label: "Alte Cheltuieli", icon: Coins },
@@ -154,6 +159,9 @@ export default function Header({
           <div className="hidden lg:flex shrink-0 items-center gap-2">
             <UpdateButton />
             <HelpCenter />
+            <div className="flex h-9 items-center rounded-lg border border-stone-800 bg-stone-950/40 p-0.5" aria-label={language === "ro" ? "Schimbă limba" : "Сменить язык"}>
+              {(["ro", "ru"] as Language[]).map((item) => <button key={item} type="button" onClick={() => onLanguageChange(item)} aria-pressed={language === item} className={language === item ? "h-7 min-w-8 rounded-md bg-amber-600 px-1.5 text-[10px] font-black text-stone-950" : "h-7 min-w-8 rounded-md px-1.5 text-[10px] font-black text-stone-400 hover:bg-stone-800 hover:text-amber-500"}>{item.toUpperCase()}</button>)}
+            </div>
             <button onClick={onToggleTheme} className="grid h-9 w-9 place-items-center rounded-lg border border-stone-800 text-stone-400 transition-colors hover:border-amber-700 hover:bg-stone-800 hover:text-amber-500" title={theme === "dark" ? "Activează tema de zi" : "Activează tema de noapte"} aria-label="Schimbă tema">
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
@@ -174,6 +182,7 @@ export default function Header({
 
           {/* Mobile Menu Button */}
           <div className="ml-auto lg:hidden flex items-center space-x-2">
+            <button type="button" onClick={() => onLanguageChange(language === "ro" ? "ru" : "ro")} className="min-w-10 rounded-md p-2 text-xs font-black text-stone-300 hover:bg-stone-800 hover:text-amber-500" aria-label={language === "ro" ? "Schimbă limba" : "Сменить язык"}>{language.toUpperCase()}</button>
             <button onClick={onToggleTheme} className="p-2 rounded-md text-stone-300 hover:text-amber-500 hover:bg-stone-800" aria-label="Schimbă tema">
               {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>

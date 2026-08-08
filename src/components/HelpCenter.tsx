@@ -59,7 +59,7 @@ function Picture({ section, language }: { section: Section; language: Language }
 }
 
 function HelpModal({ onClose }: { onClose: () => void }) {
-  const [language, setLanguage] = useState<Language>(() => localStorage.getItem("afumaturi-help-language") === "ru" ? "ru" : "ro");
+  const language: Language = localStorage.getItem("afumaturi-help-language") === "ru" ? "ru" : "ro";
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState(() => localStorage.getItem("afumaturi-help-section") || sections[0].id);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -69,13 +69,11 @@ function HelpModal({ onClose }: { onClose: () => void }) {
   useEffect(() => { if (filtered.length && !filtered.some((s) => s.id === activeId)) setActiveId(filtered[0].id); }, [activeId, filtered]);
   const active = sections.find((s) => s.id === activeId) || sections[0]; const index = sections.findIndex((s) => s.id === active.id); const ActiveIcon = icons[active.icon];
   const select = (id: string) => { setActiveId(id); localStorage.setItem("afumaturi-help-section", id); };
-  const changeLanguage = (next: Language) => { setLanguage(next); localStorage.setItem("afumaturi-help-language", next); };
   return <div className="fixed inset-0 z-[200] flex bg-black/75 backdrop-blur-sm sm:p-3 lg:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
     <section role="dialog" aria-modal="true" aria-labelledby="help-title" className="m-auto flex h-full w-full max-w-[1500px] flex-col overflow-hidden bg-stone-100 text-stone-900 shadow-2xl sm:h-[96vh] sm:rounded-2xl sm:border sm:border-stone-600">
       <header className="shrink-0 border-b border-stone-700 bg-stone-900 px-4 py-3 text-white sm:px-6"><div className="flex flex-wrap items-center gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-500 text-stone-950"><BookOpen /></span><div className="min-w-0"><h2 id="help-title" className="truncate text-lg font-black sm:text-2xl">{copy.title}</h2><p className="hidden text-sm text-stone-400 sm:block">{copy.subtitle}</p></div></div>
         <div className="order-3 flex w-full items-center gap-2 rounded-xl border border-stone-700 bg-stone-950 px-3 sm:order-none sm:w-[340px] lg:w-[420px]"><Search className="h-5 w-5 shrink-0 text-amber-500" /><label className="sr-only" htmlFor="help-search">{copy.search}</label><input id="help-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={copy.search} className="h-11 w-full bg-transparent text-base text-white outline-none placeholder:text-stone-500" />{query && <button onClick={() => setQuery("")} aria-label={copy.close}><X className="h-4 w-4" /></button>}</div>
-        <div className="flex rounded-lg border border-stone-700 bg-stone-950 p-1" aria-label={copy.language}>{(["ro", "ru"] as Language[]).map((item) => <button key={item} onClick={() => changeLanguage(item)} className={`min-w-11 rounded-md px-2 py-2 text-sm font-black ${language === item ? "bg-amber-500 text-stone-950" : "text-stone-300 hover:bg-stone-800"}`} aria-pressed={language === item}>{item.toUpperCase()}</button>)}</div>
         <button ref={closeRef} onClick={onClose} className="flex h-11 items-center gap-2 rounded-lg border border-stone-700 px-3 font-semibold hover:border-red-500 hover:bg-red-950" aria-label={copy.close}><X className="h-5 w-5" /><span className="hidden xl:inline">{copy.close}</span></button>
       </div></header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">

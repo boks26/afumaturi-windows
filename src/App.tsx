@@ -33,8 +33,10 @@ import {
   productionJobApi,
 } from "./services/desktopApi";
 import { ApiError } from "./services/apiClient";
+import { getStoredLanguage, useDocumentLanguage, type Language } from "./i18n";
 
 export default function App() {
+  const [language, setLanguage] = useState<Language>(getStoredLanguage);
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     localStorage.getItem("afumaturi-theme") === "light" ? "light" : "dark",
   );
@@ -46,6 +48,7 @@ export default function App() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  useDocumentLanguage(language);
 
   // Master persistent states
   const [resources, setResources] = useState<Resource[]>([]);
@@ -721,6 +724,8 @@ export default function App() {
         onLogout={handleLogout}
         theme={theme}
         onToggleTheme={toggleTheme}
+        language={language}
+        onLanguageChange={setLanguage}
       />
 
       {/* Main app grid area */}
