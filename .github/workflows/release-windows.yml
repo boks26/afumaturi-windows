@@ -25,6 +25,7 @@ jobs:
       VITE_API_PATH: ${{ secrets.VITE_API_PATH }}
       VITE_API_TIMEOUT_MS: ${{ secrets.VITE_API_TIMEOUT_MS }}
       VITE_OAUTH_CLIENT_ID: ${{ secrets.VITE_OAUTH_CLIENT_ID }}
+      VITE_OAUTH_CLIENT_SECRET: ${{ secrets.VITE_OAUTH_CLIENT_SECRET }}
 
     steps:
       - name: Checkout release source
@@ -41,7 +42,7 @@ jobs:
           if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$packageVersion") {
             throw "Tag ${{ github.ref_name }} does not match application version v$packageVersion."
           }
-          foreach ($name in @("VITE_API_BASE_URL", "VITE_API_PATH", "VITE_API_TIMEOUT_MS", "VITE_OAUTH_CLIENT_ID")) {
+          foreach ($name in @("VITE_API_BASE_URL", "VITE_API_PATH", "VITE_API_TIMEOUT_MS", "VITE_OAUTH_CLIENT_ID", "VITE_OAUTH_CLIENT_SECRET")) {
             if (-not [Environment]::GetEnvironmentVariable($name)) {
               throw "$name is not configured."
             }
