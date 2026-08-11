@@ -52,18 +52,27 @@ jobs:
       - name: Configure deployment key
         shell: pwsh
         env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KEY_BASE64: ${{ secrets.DEPLOY_SSH_KEY_BASE64 }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
-          if (-not $env:DEPLOY_SSH_KEY) { throw "DEPLOY_SSH_KEY is not configured." }
+          if (-not $env:DEPLOY_SSH_KEY_BASE64) { throw "DEPLOY_SSH_KEY_BASE64 is not configured." }
           if (-not $env:DEPLOY_HOST) { throw "DEPLOY_HOST is not configured." }
           if (-not $env:DEPLOY_KNOWN_HOSTS) { throw "DEPLOY_KNOWN_HOSTS is not configured." }
           $keyPath = Join-Path $env:RUNNER_TEMP "afumaturi_contabo"
-          [IO.File]::WriteAllText($keyPath, $env:DEPLOY_SSH_KEY, [Text.UTF8Encoding]::new($false))
+          try {
+            $keyBytes = [Convert]::FromBase64String($env:DEPLOY_SSH_KEY_BASE64.Trim())
+          } catch {
+            throw "DEPLOY_SSH_KEY_BASE64 is not valid base64."
+          }
+          [IO.File]::WriteAllBytes($keyPath, $keyBytes)
           & icacls.exe $keyPath /inheritance:r | Out-Null
           & icacls.exe $keyPath /grant:r "${env:USERNAME}:(R)" | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "Could not restrict deployment key permissions." }
+          & ssh-keygen.exe -y -f $keyPath | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            throw "DEPLOY_SSH_KEY_BASE64 does not decode to a valid OpenSSH private key."
+          }
           $sshDirectory = Join-Path $HOME ".ssh"
           New-Item -ItemType Directory -Path $sshDirectory -Force | Out-Null
           [IO.File]::WriteAllText((Join-Path $sshDirectory "known_hosts"), $env:DEPLOY_KNOWN_HOSTS, [Text.UTF8Encoding]::new($false))
