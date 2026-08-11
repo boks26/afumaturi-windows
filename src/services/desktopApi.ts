@@ -74,6 +74,7 @@ interface ApiRecipe {
 interface StoredRecipeData {
   categoryId?: string;
   isSubRecipe?: boolean;
+  subrecipeScalingBasis?: Recipe["subrecipeScalingBasis"];
   baseUnit?: "kg" | "buc";
   defaultMarkup?: number;
   lines?: RecipeLine[];
@@ -98,6 +99,7 @@ const mapRecipe = (recipe: ApiRecipe): Recipe => {
     label: recipe.title,
     categoryId: stored.categoryId || String(recipe.field_categorie || ""),
     isSubRecipe: stored.isSubRecipe ?? false,
+    subrecipeScalingBasis: stored.subrecipeScalingBasis,
     baseUnit:
       stored.baseUnit || (recipe.field_unitate_baza === "buc" ? "buc" : "kg"),
     defaultMarkup: stored.defaultMarkup ?? 0,
@@ -120,6 +122,7 @@ const recipePayload = (recipe: Omit<Recipe, "id"> | Partial<Recipe>) => ({
   field_ingrediente: JSON.stringify({
     categoryId: recipe.categoryId,
     isSubRecipe: recipe.isSubRecipe,
+    subrecipeScalingBasis: recipe.subrecipeScalingBasis,
     baseUnit: recipe.baseUnit,
     defaultMarkup: recipe.defaultMarkup,
     lines: recipe.lines || [],

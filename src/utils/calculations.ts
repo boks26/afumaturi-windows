@@ -1,5 +1,9 @@
 import { Recipe, Resource, Employee, RecipeLine, RecipeLineType } from '../types';
 
+const usesParentInputQuantity = (recipe: Recipe): boolean =>
+  recipe.subrecipeScalingBasis === 'parent_input' ||
+  (recipe.subrecipeScalingBasis === undefined && recipe.isSubRecipe && /marinad/i.test(recipe.label));
+
 /**
  * Recursively calculates the unit cost of a recipe per its base unit (1 kg or 1 buc).
  */
@@ -34,8 +38,9 @@ export function calculateRecipeCost(
       }
       case 'subreteta': {
         if (line.subRecipeId) {
+          const subrecipe = allRecipes.find((item) => item.id === line.subRecipeId);
           const subCost = calculateRecipeCost(line.subRecipeId, allRecipes, allResources, allEmployees, new Set(visited));
-          totalCost += subCost * line.quantity;
+          totalCost += subCost * (subrecipe && usesParentInputQuantity(subrecipe) ? 1 : line.quantity);
         }
         break;
       }
@@ -160,7 +165,15 @@ export function scaleRecipeIngredients(
         if (existing) { existing.quantity += scaledQty; existing.total += resource.currentPrice * scaledQty; }
         else items.push({ resourceId: resource.id, label: resource.label, quantity: scaledQty, unit: resource.unit, priceUnit: resource.currentPrice, total: resource.currentPrice * scaledQty });
       }
-      else if (line.type === 'subreteta' && line.subRecipeId) collectSubrecipeCondiments(line.subRecipeId, scaledQty, items, nextVisited);
+      else if (line.type === 'subreteta' && line.subRecipeId) {
+        const subrecipe = allRecipes.find((item) => item.id === line.subRecipeId);
+        collectSubrecipeCondiments(
+          line.subRecipeId,
+          subrecipe && usesParentInputQuantity(subrecipe) ? multiplier : scaledQty,
+          items,
+          nextVisited,
+        );
+      }
     }
   };
 
@@ -240,12 +253,15 @@ export function scaleRecipeIngredients(
         case 'subreteta': {
           if (line.subRecipeId) {
             const subrecipe = allRecipes.find((item) => item.id === line.subRecipeId);
+            const ingredientMultiplier = subrecipe && usesParentInputQuantity(subrecipe)
+              ? multiplier
+              : scaledQty;
             const condimente: ScaledItem[] = [];
-            collectSubrecipeCondiments(line.subRecipeId, scaledQty, condimente, new Set());
+            collectSubrecipeCondiments(line.subRecipeId, ingredientMultiplier, condimente, new Set());
             const unitCost = subrecipe ? calculateRecipeCost(subrecipe.id, allRecipes, allResources, allEmployees) : 0;
-            result.subrecipes.push({ recipeId: line.subRecipeId, label: subrecipe?.label || `Subrețeta ${line.subRecipeId}`, quantity: scaledQty, unit: subrecipe?.baseUnit || 'kg', unitCost, totalCost: unitCost * scaledQty, condimente });
+            result.subrecipes.push({ recipeId: line.subRecipeId, label: subrecipe?.label || `Subrețeta ${line.subRecipeId}`, quantity: scaledQty, unit: subrecipe?.baseUnit || 'kg', unitCost, totalCost: unitCost * ingredientMultiplier, condimente });
             // Recursively traverse the sub-recipe, flag as sub-level to separate spices
-            traverse(line.subRecipeId, scaledQty, true);
+            traverse(line.subRecipeId, ingredientMultiplier, true);
           }
           break;
         }

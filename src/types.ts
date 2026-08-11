@@ -45,6 +45,7 @@ export interface Employee {
 
 export type RecipeLineType =
   "materie_prima" | "condiment" | "subreteta" | "alta_cheltuiala" | "manopera";
+export type SubrecipeScalingBasis = "subrecipe_quantity" | "parent_input";
 
 export interface RecipeLine {
   id: string;
@@ -60,6 +61,9 @@ export interface Recipe {
   label: string;
   categoryId?: string; // legacy catalog classification; not used by recipe calculations
   isSubRecipe: boolean; // e.g., marinade or brine is subrecipe
+  // Whether its ingredient norms are per kg of the prepared subrecipe or per
+  // kg of meat from the parent recipe.
+  subrecipeScalingBasis?: SubrecipeScalingBasis;
   baseUnit: "kg" | "buc";
   defaultMarkup: number; // percentage, e.g., 70 for 70%
   lines: RecipeLine[];
