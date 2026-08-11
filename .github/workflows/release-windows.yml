@@ -21,6 +21,10 @@ jobs:
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+      VITE_API_PATH: ${{ secrets.VITE_API_PATH }}
+      VITE_API_TIMEOUT_MS: ${{ secrets.VITE_API_TIMEOUT_MS }}
+      VITE_OAUTH_CLIENT_ID: ${{ secrets.VITE_OAUTH_CLIENT_ID }}
 
     steps:
       - name: Checkout release source
@@ -36,6 +40,11 @@ jobs:
           }
           if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$packageVersion") {
             throw "Tag ${{ github.ref_name }} does not match application version v$packageVersion."
+          }
+          foreach ($name in @("VITE_API_BASE_URL", "VITE_API_PATH", "VITE_API_TIMEOUT_MS", "VITE_OAUTH_CLIENT_ID")) {
+            if (-not [Environment]::GetEnvironmentVariable($name)) {
+              throw "$name is not configured."
+            }
           }
 
       - name: Set up Node.js
